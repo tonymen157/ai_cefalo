@@ -1,0 +1,41 @@
+{
+  "skill_name": "ETL_Engineer",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Necesito un pipeline que lea el archivo 'flights.csv' en la carpeta data/raw/, lo procesa para eliminar duplicados y cargarlo al staging de PostgreSQL. Muestra los logs del proceso.",
+      "expected_output": "Script ETL completo que lea data/raw/flights.csv, elimine duplicados, y cargue en PostgreSQL staging con logs detallados.",
+      "files": ["data/raw/flights.csv"]
+    },
+    {
+      "id": 1,
+      "prompt": "Valida los datos en data/raw/airlines.csv: revisa si hay valores nulos en la columna 'iata_code' y elimínalos si es necesario.",
+      "expected_output": "Proceso que identifica y elimina filas con iata_code nulo, generando un archivo limpio en data/processed/airlines_clean.csv.",
+      "files": ["data/raw/airlines.csv"]
+    },
+    {
+      "id": 2,
+      "prompt": "Extrae los datos de data/raw/airports.json, realiza una transformación para normalizar los nombres de ciudad a mayúsculas y guarda en data/processed/airports_normalized.json.",
+      "expected_output": "Script que convierte JSON a DataFrame, normaliza 'city' a uppercase y guarda JSON procesado.",
+      "files": ["data/raw/airports.json"]
+    },
+    {
+      "id": 3,
+      "prompt": "¿Cómo configuro un schedule para validar los datos de migrations diarias?",
+      "expected_output": "N/A - esta consulta no debería activar la skill ETL_Engineer porque no trata sobre procesamiento de datos.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Procesa el archivo data/raw/flights_new.csv con encoding UTF-16. Asegúrate de detectar el encoding antes de leer.",
+      "expected_output": "Script que detecta encoding UTF-16, lee el CSV, y aplica transformaciones ETL estándar.",
+      "files": ["data/raw/flights_new.csv"]
+    },
+    {
+      "id": 5,
+      "prompt": "Crea un dashboard de PowerBI con los datos de data/processed/flights_limpio.csv. Incluye métricas de retraso promedio.",
+      "expected_output": "N/A - esta consulta no debería activar ETL_Engineer; requiere una skill de visualización (DAX_PowerBI_Pro).",
+      "files": []
+    }
+  ]
+}

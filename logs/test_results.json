@@ -1,0 +1,14 @@
+{
+  "test_set_size": 150,
+  "mre_mm_mean": 1.267008662223816,
+  "mre_mm_std": 0.58477783203125,
+  "sdr_1mm": 52.62068965517241,
+  "sdr_2mm": 82.98850574712644,
+  "sdr_25mm": 88.75862068965517,
+  "sdr_3mm": 93.28735632183907,
+  "sdr_4mm": 96.80459770114943,
+  "baseline_mre": 1.789,
+  "baseline_sdr2": 78.44,
+  "better_than_baseline": true,
+  "pixel_size_mean": 0.11588000000000001
+}

@@ -1,0 +1,48 @@
+data:
+  dataset_path: data/raw/Aariz
+  num_workers: 2
+  test_split: 150
+  train_split: 700
+  val_split: 150
+  augmentation:
+    color_jitter:
+      brightness: 0.3
+      contrast: 0.3
+    random_affine:
+      degrees: 8.0
+      translate: [0.06, 0.06]
+      scale: [0.9, 1.1]
+  preprocessing:
+    clahe:
+      clip_limit: 2.0
+      tile_grid_size: [8, 8]
+    nlm_h: 10
+    nlm_template_window: 7
+    nlm_search_window: 21
+loss:
+  lambda_wing: 0.5
+  primary: MSELoss + WingLoss
+  foreground_threshold: 0.01
+model:
+  encoder: resnet50
+  in_channels: 1
+  num_landmarks: 29
+  pretrained: true
+training:
+  accumulation_steps: 4
+  batch_size: 4
+  early_stop_patience: 250
+  epochs: 200
+  curriculum_epochs: 100
+  lr: 0.001
+  num_landmarks: 29
+  optimizer: AdamW
+  scheduler: ReduceLROnPlateau
+  scheduler_patience: 10
+  scheduler_factor: 0.5
+  weight_decay: 0.0001
+wandb:
+  entity: steven
+  mode: disabled
+  name_template: unet-resnet50-lr{lr}-bs{batch_size}
+  project: aicefalo

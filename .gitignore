@@ -1,0 +1,40 @@
+# Entornos y dependencias
+venv/
+env/
+node_modules/
+__pycache__/
+*.pyc
+
+# Datos pesados y multimedia (solo en raíz)
+/data/
+/uploads/
+*.jpg
+*.png
+*.jpeg
+*.mp4
+*.pth
+*.pt
+
+# Configuración sensible
+.env
+.DS_Store
+
+# Bases de datos
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Builds
+/dist/
+/build/
+
+# Archivos del sistema
+.vscode/
+.idea/
+
+# Hugging Face token (local only)
+.hf_token
+hf_token.txt
