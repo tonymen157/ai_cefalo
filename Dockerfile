@@ -4,6 +4,5 @@ RUN apt-get update && apt-get install -y libgl1 libglib2.0-0 && rm -rf /var/lib/
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
-COPY models/ ./models/
-COPY data/ ./data/
+RUN mkdir -p /app/models /app/data
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "7860"]
