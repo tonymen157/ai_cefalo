@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CEPHALOMETRIC_NORMS } from '../constants/analysisNorms';
 
-function SteinerTable({ results }) {
+function SteinerTable({ results, isPdfMode = false }) {
   const [activeCategory, setActiveCategory] = useState('todas');
 
   const getInterpretation = (val, item, results) => {
@@ -76,32 +76,34 @@ function SteinerTable({ results }) {
         </div>
       )}
 
-      {/* CABECERA CON EL MENU DESPLEGABLE */}
+      {/* CABECERA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-200 pb-3 gap-3">
         <h3 className="text-lg font-bold text-gray-800">Resultados Clinicos</h3>
-        <div className="flex items-center space-x-2">
-          <label htmlFor="category-filter" className="text-sm font-semibold text-gray-600 whitespace-nowrap">
-            Filtro:
-          </label>
-          <select
-            id="category-filter"
-            value={activeCategory}
-            onChange={(e) => setActiveCategory(e.target.value)}
-            className="bg-white border border-gray-300 text-gray-700 py-1.5 px-3 rounded-lg shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-          >
-            <option value="todas">Mostrar Todo</option>
-            <option value="esqueletal">Esqueletal (Steiner/Wits)</option>
-            <option value="dental">Inclinacion Dental</option>
-            <option value="estetico">Estetico (Ricketts)</option>
-            <option value="jarabak_lineal">Lineales (Jarabak)</option>
-            <option value="jarabak_angular">Angulares (Jarabak)</option>
-          </select>
-        </div>
+        {!isPdfMode && (
+          <div className="flex items-center space-x-2">
+            <label htmlFor="category-filter" className="text-sm font-semibold text-gray-600 whitespace-nowrap">
+              Filtro:
+            </label>
+            <select
+              id="category-filter"
+              value={activeCategory}
+              onChange={(e) => setActiveCategory(e.target.value)}
+              className="bg-white border border-gray-300 text-gray-700 py-1.5 px-3 rounded-lg shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="todas">Mostrar Todo</option>
+              <option value="esqueletal">Esqueletal (Steiner/Wits)</option>
+              <option value="dental">Inclinacion Dental</option>
+              <option value="estetico">Estetico (Ricketts)</option>
+              <option value="jarabak_lineal">Lineales (Jarabak)</option>
+              <option value="jarabak_angular">Angulares (Jarabak)</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {/* RENDERIZADO DINAMICO DE LAS TABLAS */}
       {Object.entries(CEPHALOMETRIC_NORMS)
-        .filter(([key]) => activeCategory === 'todas' || activeCategory === key)
+        .filter(([key]) => isPdfMode || activeCategory === 'todas' || activeCategory === key)
         .map(([key, category]) => (
           <div key={key} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
             <div className="bg-blue-50/50 px-4 py-2.5 font-semibold text-sm text-blue-800 border-b border-gray-200">

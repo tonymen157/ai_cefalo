@@ -4,7 +4,7 @@ import html2pdf from 'html2pdf.js'
 import SteinerTable from './SteinerTable'
 
 function DownloadStep() {
-  const [downloading, setDownloading] = useState(false)
+  const [loading, setDownloading] = useState(false)
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [analysisResults, setAnalysisResults] = useState(null)
   const reportRef = useRef(null)
@@ -29,11 +29,21 @@ function DownloadStep() {
     }
   }, [])
 
+  // SI NO HAY IMAGEN CAPTURADA: redirigir a upload (NO a results)
   useEffect(() => {
-    if (!imageId) {
+    // Si no hay capturedImage y no hay imageId -> upload
+    // Si hay imageId pero no capturedImage -> tb debería ir a upload
+    // (porque no hay canvas en Paso 5 para recapturar)
+    if (!capturedImage && !imageId) {
+      navigate('/upload', { replace: true })
+    } else if (!capturedImage && imageId) {
+      // Hay imageId pero no capturedImage (se recargó Paso 5)
+      // Redirigir a upload con mensaje
+      console.warn('No hay imagen capturada. Volviendo al inicio...')
+      alert('No hay imagen capturada. Volviendo al inicio...')
       navigate('/upload', { replace: true })
     }
-  }, [navigate])
+  }, [capturedImage, imageId, navigate])
 
   // Volver a edición (Paso 4)
   const handleBackToEdit = () => {
@@ -118,13 +128,6 @@ function DownloadStep() {
     }
   }
 
-  // Obtener valor de resultado de forma segura
-  const getResult = (key, decimals = 1) => {
-    const val = analysisResults?.[key]
-    if (val == null || isNaN(val)) return '--'
-    return `${parseFloat(val).toFixed(decimals)}`
-  }
-
   return (
     <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-4">Paso 5: Descargar Resultados</h2>
@@ -180,228 +183,9 @@ function DownloadStep() {
           )}
         </div>
 
-        {/* Tablas clínicas COMPLETAS */}
+        {/* Resultados Clínicos: Solo el componente real (sin duplicados) */}
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-gray-700 mb-3">Resultados Clínicos Completos</h3>
-
-          {/* Diagnóstico de Clase Esqueletal */}
-          {analysisResults?.clase_esqueletal && (
-            <div className={`text-center py-2 px-4 rounded-lg border font-bold text-sm mb-4 ${
-              analysisResults.clase_esqueletal === 'Clase III'
-                ? 'bg-orange-100 text-orange-800 border-orange-300'
-                : analysisResults.clase_esqueletal === 'Clase II'
-                ? 'bg-red-100 text-red-800 border-red-300'
-                : 'bg-green-100 text-green-800 border-green-300'
-            }`}>
-              Diagnóstico Esqueletal: {analysisResults.clase_esqueletal}
-              {analysisResults?.ANB != null && ` (ANB: ${parseFloat(analysisResults.ANB).toFixed(1)}°, Wits: ${analysisResults.WITS != null ? parseFloat(analysisResults.WITS).toFixed(1) + 'mm' : 'N/A'})`}
-            </div>
-          )}
-
-          {/* 1. Medidas Clase Esqueletal (SNA, SNB, ANB, Wits) */}
-          <div className="mb-6">
-            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">1. Medidas Clase Esqueletal</h4>
-            <table className="w-full text-sm border-collapse mb-4">
-              <thead className="bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="text-left px-3 py-2 border-b">Medida</th>
-                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
-                  <th className="text-center px-3 py-2 border-b">Paciente</th>
-                  <th className="text-center px-3 py-2 border-b">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">SNA</td>
-                  <td className="text-center px-3 py-2 text-gray-500">82° (±3.5)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('SNA')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      analysisResults?.SNA_interp?.includes('Clase') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                    }`}>{analysisResults?.SNA_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">SNB</td>
-                  <td className="text-center px-3 py-2 text-gray-500">80° (±3.5)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('SNB')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      analysisResults?.SNB_interp?.includes('Clase') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                    }`}>{analysisResults?.SNB_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">ANB</td>
-                  <td className="text-center px-3 py-2 text-gray-500">2° (±2)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('ANB')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      analysisResults?.ANB_interp?.includes('Clase III') ? 'bg-orange-100 text-orange-800'
-                      : analysisResults?.ANB_interp?.includes('Clase II') ? 'bg-red-100 text-red-800'
-                      : 'bg-green-100 text-green-800'
-                    }`}>{analysisResults?.ANB_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Wits</td>
-                  <td className="text-center px-3 py-2 text-gray-500">0.5mm (±2.5)</td>
-                  <td className="text-center px-3 py-2 font-bold">{analysisResults?.WITS != null ? getResult('WITS') + 'mm' : '--'}</td>
-                  <td className="text-center px-3 py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      analysisResults?.WITS_interp?.includes('Clase') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                    }`}>{analysisResults?.WITS_interp || '--'}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* 2. Inclinación Dental (Steiner & Ricketts) */}
-          <div className="mb-6">
-            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">2. Inclinación Dental (Steiner)</h4>
-            <table className="w-full text-sm border-collapse mb-4">
-              <thead className="bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="text-left px-3 py-2 border-b">Medida</th>
-                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
-                  <th className="text-center px-3 py-2 border-b">Paciente</th>
-                  <th className="text-center px-3 py-2 border-b">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">1 Sup (Steiner)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">109° (±6)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('1_Sup')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      analysisResults?.Dental_1Sup_interp?.includes('↓') ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
-                    }`}>{analysisResults?.Dental_1Sup_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">1 Inf (Steiner)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">93° (±6)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('1_Inf')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      analysisResults?.Dental_1Inf_interp?.includes('↓') ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
-                    }`}>{analysisResults?.Dental_1Inf_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">1 Sup (Ricketts)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">110° (±5)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('Ricketts_1Sup')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Ricketts_1Sup_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">1 Inf (Ricketts)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">90° (±5)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('Ricketts_1Inf')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Ricketts_1Inf_interp || '--'}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* 3. Línea Estética de Ricketts */}
-          <div className="mb-6">
-            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">3. Línea Estética (Ricketts)</h4>
-            <table className="w-full text-sm border-collapse mb-4">
-              <thead className="bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="text-left px-3 py-2 border-b">Medida</th>
-                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
-                  <th className="text-center px-3 py-2 border-b">Paciente</th>
-                  <th className="text-center px-3 py-2 border-b">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Ls - Línea E</td>
-                  <td className="text-center px-3 py-2 text-gray-500">-1mm (±2)</td>
-                  <td className="text-center px-3 py-2 font-bold">{analysisResults?.Ls_E != null ? `${analysisResults.Ls_E >= 0 ? '+' : ''}${parseFloat(analysisResults.Ls_E).toFixed(1)}mm` : '--'}</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Ls_E_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Li - Línea E</td>
-                  <td className="text-center px-3 py-2 text-gray-500">0mm (±2)</td>
-                  <td className="text-center px-3 py-2 font-bold">{analysisResults?.Li_E != null ? `${analysisResults.Li_E >= 0 ? '+' : ''}${parseFloat(analysisResults.Li_E).toFixed(1)}mm` : '--'}</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Li_E_interp || '--'}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* 4. Medidas Lineales Jarabak */}
-          <div className="mb-6">
-            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">4. Medidas Lineales (Jarabak)</h4>
-            <table className="w-full text-sm border-collapse mb-4">
-              <thead className="bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="text-left px-3 py-2 border-b">Medida</th>
-                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
-                  <th className="text-center px-3 py-2 border-b">Paciente</th>
-                  <th className="text-center px-3 py-2 border-b">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Silla (S-N-S-Ar)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">126° (±6)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('Silla')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Silla_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Articular (N-S-Ar)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">120° (±6)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('Articular')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Articular_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Goniaco (Ar-Go-Me)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">130° (±6)</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('Goniaco')}°</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Goniaco_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Base Craneal Ant (N-S)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">~70mm</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('Base_Craneal_Ant')}mm</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Base_Craneal_Ant_interp || '--'}</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-3 py-2">Cuerpo Mandibular (Go-Me)</td>
-                  <td className="text-center px-3 py-2 text-gray-500">~75mm</td>
-                  <td className="text-center px-3 py-2 font-bold">{getResult('Cuerpo_Mandibular')}mm</td>
-                  <td className="text-center px-3 py-2">
-                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Cuerpo_Mandibular_interp || '--'}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* SteinerTable original (si está disponible) */}
-          {analysisResults && <SteinerTable results={analysisResults} />}
+          {analysisResults && <SteinerTable results={analysisResults} isPdfMode={true} />}
         </div>
 
         {/* Disclaimer */}
@@ -436,10 +220,10 @@ function DownloadStep() {
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={handleDownloadImage}
-            disabled={downloading}
+            disabled={loading}
             className="bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium transition"
           >
-            {downloading ? 'Procesando...' : '💾 Descargar Radiografía'}
+            {loading ? 'Procesando...' : '💾 Descargar Radiografía'}
           </button>
 
           <button
