@@ -264,7 +264,7 @@ def main():
         # Calcular estadísticas si hay GT (solo test set)
         pass
 
-    # 10. ANÁLISIS CEFALOMÉTRICO DE STEINER
+    # 10. ANÁLISIS CEFALOMÉTRICO (Fase 2 - Motor Completo)
     from src.analysis.geometry import CephalometricAnalysis
 
     analisis = CephalometricAnalysis(
@@ -272,8 +272,7 @@ def main():
         nombre_imagen=str(img_path.name),
         escala_mm=pixel_size,
     )
-    angulos = analisis.angulos_steiner()
-    clase = analisis.clase_esqueletica()
+    full_analysis = analisis.reporte_json()
 
     # 11. Guardar resultados
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
@@ -281,6 +280,18 @@ def main():
 
     cv2.imwrite(args.output, img_vis)
     print(f"\n[Output] Imagen guardada: {args.output}")
+
+    # Determinar clase esquelética basado en ANB
+    anb = full_analysis.get("ANB")
+    if anb is not None:
+        if anb > 4:
+            clase = "Clase III"
+        elif anb > 2:
+            clase = "Clase II"
+        else:
+            clase = "Clase I"
+    else:
+        clase = "N/A"
 
     # JSON
     landmarks_dict = {
@@ -290,7 +301,7 @@ def main():
         "landmarks": [],
         "landmark_names": landmark_names,
         "num_landmarks": NUM_LANDMARKS,
-        "cephalometric_analysis": analisis.reporte_json()["angulos"],
+        "cephalometric_analysis": full_analysis,
         "skeletal_class": clase,
     }
 

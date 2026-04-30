@@ -4,6 +4,7 @@ from src.api.database import get_db
 from src.api.models import Job
 from src.api.services.landmark_detector import detect_landmarks
 from src.api.services.image_processor import get_image_path
+from src.analysis.geometry import CephalometricAnalysis
 from pathlib import Path
 import uuid
 import json
@@ -79,6 +80,19 @@ def run_inference(job_id: str, image_id: str, calibration_mmpp: float, db: Sessi
             job.progress = 100.0
             job.landmarks = json.dumps(landmarks.tolist())
             job.pred_image_path = str(pred_path)
+
+            # Ejecutar motor Fase 2 y guardar análisis completo
+            try:
+                analisis = CephalometricAnalysis(
+                    coords=landmarks,
+                    nombre_imagen=image_id,
+                    escala_mm=calibration_mmpp if calibration_mmpp > 0 else None,
+                )
+                full_analysis = analisis.reporte_json()
+                job.analysis_results = json.dumps(full_analysis)
+            except Exception as analysis_err:
+                print(f"Warning: Could not compute analysis: {analysis_err}")
+
             db.commit()
     except Exception as e:
         # Update job with error
@@ -163,6 +177,8 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
     }
     if job.landmarks:
         response["landmarks"] = json.loads(job.landmarks)
+    if job.analysis_results:
+        response["analysis_results"] = json.loads(job.analysis_results)
     if job.error:
         response["error"] = job.error
     if job.pred_image_path:
