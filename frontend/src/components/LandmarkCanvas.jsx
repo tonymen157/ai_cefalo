@@ -36,7 +36,7 @@ function LandmarkCanvas({
     return null
   }
 
-  // Cargar imagen una vez
+  // 1) Cargar imagen UNA vez
   useEffect(() => {
     const finalUrl = getFinalUrl()
     if (!finalUrl) {
@@ -64,20 +64,27 @@ function LandmarkCanvas({
     return () => { img.onload = null; img.onerror = null }
   }, [imageId, imageUrl])
 
-  // Dibujar
+  // 2) Dibujar
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !imgLoaded || !imgRef.current) return
 
     const dpr = window.devicePixelRatio || 1
-    canvas.width = imgSize.w * dpr
-    canvas.height = imgSize.h * dpr
+
+    // Configuración CRÍTICA para nitidez:
+    // El buffer interno es imgSize * dpr
+    canvas.width = Math.round(imgSize.w * dpr)
+    canvas.height = Math.round(imgSize.h * dpr)
+    // El CSS debe coincidir EXACTAMENTE con el tamaño lógico (imgSize)
+    canvas.style.width = `${imgSize.w}px`
+    canvas.style.height = `${imgSize.h}px`
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     try {
       ctx.save()
+      // Escalar: todo lo que dibujemos usa coordenadas lógicas (imgSize)
       ctx.scale(dpr, dpr)
 
       // Dibujar imagen desde cache
@@ -102,7 +109,7 @@ function LandmarkCanvas({
         ctx.stroke()
       }
 
-      // Líneas
+      // Líneas y etiquetas
       if (showLines && landmarks.length >= 29) {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
         ctx.shadowBlur = 3
@@ -120,20 +127,34 @@ function LandmarkCanvas({
           ctx.stroke()
         }
 
+        // ETIOUETAS SIN RECUADRO - usa strokeText para contorno
         const drawLabel = (text, x, y, color, offsetX = 6, offsetY = -6) => {
           if (!text && text !== 0) return
           if (!showLabels) return
+
           ctx.save()
-          ctx.font = `bold ${labelFontSize}px sans-serif`
+          const fontSize = labelFontSize
+          ctx.font = `bold ${fontSize}px sans-serif`
           ctx.textBaseline = 'top'
+
           const metrics = ctx.measureText(text)
-          const pad = 4
+          const textW = metrics.width
+          const textH = fontSize
+
           const lx = x + offsetX
           const ly = y + offsetY
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
-          ctx.fillRect(lx - pad, ly - pad, metrics.width + pad * 2, 16 + pad * 2)
+
+          // Contorno negro (stroke) para visibilidad
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
+          ctx.lineWidth = 3
+          ctx.lineJoin = 'round'
+          ctx.strokeText(text, lx, ly)
+          ctx.lineWidth = 1
+
+          // Texto principal con color del trazado
           ctx.fillStyle = color
           ctx.fillText(text, lx, ly)
+
           ctx.restore()
         }
 
@@ -141,27 +162,35 @@ function LandmarkCanvas({
 
         // --- STEINER ---
         if (activeFilter === 'steiner') {
-          drawLine(10, 4, '#EF4444')   // S-N
-          drawLine(4, 0, '#3B82F6')    // N-A
-          drawLine(4, 2, '#22C55E')    // N-B
-          drawLine(14, 13, '#F59E0B')  // Go-Gn
+          drawLine(10, 4, '#EF4444')   // S-N (Rojo)
+          drawLine(4, 0, '#3B82F6')    // N-A (Azul)
+          drawLine(4, 2, '#22C55E')    // N-B (Verde)
+          drawLine(14, 13, '#F59E0B')  // Go-Gn (Naranja)
 
-          const nPt = landmarks[4], sPt = landmarks[10]
-          const aPt = landmarks[0], bPt = landmarks[2]
+          const nPt = landmarks[4]   // Nasion
+          const sPt = landmarks[10]  // Sella
+          const aPt = landmarks[0]   // A-point
+          const bPt = landmarks[2]   // B-point
 
           if (valid(nPt) && valid(sPt)) {
-            drawLabel(`${res.SNA?.toFixed(1) ?? '--'}°`, (nPt.x + sPt.x) / 2, (nPt.y + sPt.y) / 2, '#EF4444')
+            // SNA: cerca de Nasion, arriba
+            drawLabel(`${res.SNA?.toFixed(1) ?? '--'}°`,
+              nPt.x - 15, nPt.y - fontSize - 4, '#EF4444', -10, -4)
           }
           if (valid(nPt) && valid(sPt)) {
-            drawLabel(`${res.SNB?.toFixed(1) ?? '--'}°`, (nPt.x + sPt.x) / 2, (nPt.y + sPt.y) / 2 + 16, '#3B82F6')
+            // SNB: cerca de Sella, abajo a la derecha
+            drawLabel(`${res.SNB?.toFixed(1) ?? '--'}°`,
+              sPt.x + 8, sPt.y + 4, '#3B82F6', 8, 4)
           }
           if (valid(aPt) && valid(bPt) && valid(nPt)) {
+            // ANB: entre A y B, cerca de Nasion
             const anbText = res.ANB != null ? `ANB: ${res.ANB.toFixed(1)}°` : 'ANB: --°'
-            drawLabel(anbText, (aPt.x + bPt.x) / 2, nPt.y - 20, '#8B5CF6')
+            drawLabel(anbText,
+              Math.min(aPt.x, bPt.x) + 5, nPt.y - fontSize - 2, '#8B5CF6', 5, -2)
           }
           if (res.WITS != null && valid(aPt)) {
             const witsText = `Wits: ${res.WITS >= 0 ? '+' : ''}${res.WITS.toFixed(1)}mm`
-            drawLabel(witsText, aPt.x + 10, aPt.y + 30, '#06B6D4')
+            drawLabel(witsText, aPt.x + 10, aPt.y + fontSize + 6, '#06B6D4', 10, fontSize + 6)
           }
         }
 
@@ -179,7 +208,7 @@ function LandmarkCanvas({
             ctx.moveTo(molarMid.x, molarMid.y)
             ctx.lineTo(incisorMid.x, incisorMid.y)
             ctx.stroke()
-            drawLabel('Plano Oclusal', (molarMid.x + incisorMid.x) / 2, molarMid.y - 12, '#EC4899')
+            drawLabel('Plano Oclusal', molarMid.x + 8, molarMid.y - fontSize - 4, '#EC4899', 8, -4)
 
             const drawPerp = (ptIdx, label) => {
               const pt = landmarks[ptIdx]
@@ -191,6 +220,7 @@ function LandmarkCanvas({
               const t = ((pt.x - molarMid.x) * vx + (pt.y - molarMid.y) * vy) / (vLen * vLen)
               const projX = molarMid.x + t * vx
               const projY = molarMid.y + t * vy
+
               ctx.beginPath()
               ctx.strokeStyle = '#06B6D4'
               ctx.lineWidth = lineWidth
@@ -199,7 +229,8 @@ function LandmarkCanvas({
               ctx.lineTo(projX, projY)
               ctx.stroke()
               ctx.setLineDash([])
-              drawLabel(label, (pt.x + projX) / 2, (pt.y + projY) / 2, '#06B6D4', 8, -8)
+
+              drawLabel(label, (pt.x + projX) / 2 + 6, (pt.y + projY) / 2 - fontSize / 2, '#06B6D4', 6, -fontSize / 2)
             }
 
             if (res.WITS != null) {
@@ -214,16 +245,21 @@ function LandmarkCanvas({
 
         // --- RICKETTS ---
         if (activeFilter === 'ricketts') {
-          drawLine(28, 27, '#8B5CF6') // Sn -> Pog'
-          drawLabel('Linea E', (landmarks[28]?.x + landmarks[27]?.x) / 2 || 0, ((landmarks[28]?.y + landmarks[27]?.y) / 2 || 0) - 12, '#8B5CF6')
+          drawLine(28, 27, '#8B5CF6') // Sn -> Pog' (Morado)
+          drawLabel('Linea E', (landmarks[28]?.x + landmarks[27]?.x) / 2 || 0,
+            ((landmarks[28]?.y + landmarks[27]?.y) / 2 || 0) - fontSize - 4, '#8B5CF6', 0, -4)
 
           const lsPt = landmarks[25]
           const liPt = landmarks[24]
           if (res.Ls_E != null && valid(lsPt)) {
-            drawLabel(`Ls: ${res.Ls_E >= 0 ? '+' : ''}${res.Ls_E.toFixed(1)}mm`, lsPt.x + 10, lsPt.y, '#8B5CF6')
+            const val = res.Ls_E.toFixed(1)
+            const sign = res.Ls_E >= 0 ? '+' : ''
+            drawLabel(`Ls: ${sign}${val}mm`, lsPt.x + 10, lsPt.y, '#8B5CF6', 10, 0)
           }
           if (res.Li_E != null && valid(liPt)) {
-            drawLabel(`Li: ${res.Li_E >= 0 ? '+' : ''}${res.Li_E.toFixed(1)}mm`, liPt.x + 10, liPt.y, '#8B5CF6')
+            const val = res.Li_E.toFixed(1)
+            const sign = res.Li_E >= 0 ? '+' : ''
+            drawLabel(`Li: ${sign}${val}mm`, liPt.x + 10, liPt.y, '#8B5CF6', 10, 0)
           }
         }
 
@@ -244,16 +280,19 @@ function LandmarkCanvas({
           const drawAngle = (vIdx, txt) => {
             const v = landmarks[vIdx]
             if (!valid(v)) return
-            drawLabel(txt, v.x + 8, v.y - 8, '#10B981')
+            drawLabel(txt, v.x + 8, v.y - fontSize - 2, '#10B981', 8, -2)
           }
           if (res.Silla != null) drawAngle(10, `Silla: ${res.Silla.toFixed(1)}°`)
           if (res.Articular != null) drawAngle(11, `Art: ${res.Articular.toFixed(1)}°`)
           if (res.Goniaco != null) drawAngle(14, `Gon: ${res.Goniaco.toFixed(1)}°`)
+
           if (res.Base_Craneal_Ant != null && valid(landmarks[4]) && valid(landmarks[10])) {
-            drawLabel(`N-S: ${res.Base_Craneal_Ant.toFixed(1)}mm`, (landmarks[4].x + landmarks[10].x) / 2, (landmarks[4].y + landmarks[10].y) / 2, '#10B981', 0, 14)
+            drawLabel(`N-S: ${res.Base_Craneal_Ant.toFixed(1)}mm`,
+              (landmarks[4].x + landmarks[10].x) / 2, (landmarks[4].y + landmarks[10].y) / 2 + 4, '#10B981', 0, 4)
           }
           if (res.Cuerpo_Mandibular != null && valid(landmarks[14]) && valid(landmarks[3])) {
-            drawLabel(`Go-Me: ${res.Cuerpo_Mandibular.toFixed(1)}mm`, (landmarks[14].x + landmarks[3].x) / 2, (landmarks[14].y + landmarks[3].y) / 2, '#10B981', 0, 14)
+            drawLabel(`Go-Me: ${res.Cuerpo_Mandibular.toFixed(1)}mm`,
+              (landmarks[14].x + landmarks[3].x) / 2, (landmarks[14].y + landmarks[3].y) / 2 + 4, '#10B981', 0, 4)
           }
         }
 
@@ -261,7 +300,7 @@ function LandmarkCanvas({
         ctx.shadowBlur = 0
       }
 
-      // Puntos
+      // Puntos (colores ESTRICTOS por categoría)
       if (showPoints) {
         const rect = canvas.getBoundingClientRect()
         const stretchRatio = rect.width ? (rect.width / imgSize.w) : 1
@@ -351,11 +390,9 @@ function LandmarkCanvas({
     }
   }
 
-  // Click: toggle selección (clic en punto seleccionado = deseleccionar)
   const handleClick = () => {
     if (hoverIdx !== null) {
       if (hoverIdx === selectedLandmark) {
-        // Toggle: deseleccionar
         if (onSelectLandmark) onSelectLandmark(null, 0, 0, false)
       } else {
         if (onSelectLandmark) onSelectLandmark(hoverIdx, 0, 0, false)
@@ -375,7 +412,7 @@ function LandmarkCanvas({
           ref={canvasRef}
           onMouseMove={handleMouseMove}
           onClick={handleClick}
-          className="w-full h-auto block"
+          className="block"
         />
       </div>
     </div>
