@@ -166,7 +166,7 @@ function ResultsStep() {
   const imageId = sessionStorage.getItem('image_id')
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full">
       <h2 className="text-2xl font-bold mb-6">Paso 4: Resultados</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Canvas principal (2/3 del ancho) */}

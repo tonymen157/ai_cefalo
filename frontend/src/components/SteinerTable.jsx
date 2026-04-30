@@ -84,10 +84,10 @@ function SteinerTable({ results }) {
             <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium w-1/4">Medida</th>
-                  <th className="px-4 py-2.5 font-medium w-1/4">Norma</th>
-                  <th className="px-4 py-2.5 font-medium w-1/4">Paciente</th>
-                  <th className="px-4 py-2.5 font-medium w-1/4">Estado</th>
+                  <th className="px-6 py-3 font-medium w-1/6">Medida</th>
+                  <th className="px-6 py-3 font-medium w-1/6">Norma</th>
+                  <th className="px-6 py-3 font-medium w-1/6">Paciente</th>
+                  <th className="px-6 py-3 font-medium w-1/2">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -104,12 +104,12 @@ function SteinerTable({ results }) {
 
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-2 font-medium text-gray-800 truncate">{item.id}</td>
-                      <td className="px-4 py-2 text-gray-500 truncate">{item.normal}{item.unit} (±{item.sd})</td>
-                      <td className="px-4 py-2 font-bold text-gray-900 truncate">
+                      <td className="px-6 py-3 font-medium text-gray-800">{item.id}</td>
+                      <td className="px-6 py-3 text-gray-500">{item.normal}{item.unit} (±{item.sd})</td>
+                      <td className="px-6 py-3 font-bold text-gray-900">
                         {patientVal !== null && !isNaN(patientVal) ? `${patientVal.toFixed(2)}${item.unit}` : '-'}
                       </td>
-                      <td className={`px-4 py-2 text-xs font-semibold ${status.color} truncate`}>
+                      <td className={`px-6 py-3 text-xs font-semibold ${status.color} whitespace-normal`}>
                         <span className="px-2 py-1 rounded-full">{status.text}</span>
                       </td>
                     </tr>
