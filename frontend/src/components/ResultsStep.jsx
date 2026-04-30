@@ -111,6 +111,17 @@ function ResultsStep() {
     }
   }, [handleMoveLandmark])
 
+  // Persistir resultados en sessionStorage para el PDF
+  useEffect(() => {
+    if (analysisResults) {
+      try {
+        sessionStorage.setItem('analysis_results', JSON.stringify(analysisResults))
+      } catch (e) {
+        console.error('Error guardando resultados:', e)
+      }
+    }
+  }, [analysisResults])
+
   // Recálculo de análisis con landmarks editados
   const handleRecalculate = async () => {
     if (!calibrationMmpp || !editableLandmarks.length) return

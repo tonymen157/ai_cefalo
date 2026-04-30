@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import html2pdf from 'html2pdf.js'
+import SteinerTable from './SteinerTable'
 
 function DownloadStep() {
   const [downloading, setDownloading] = useState(false)
   const [pdfGenerating, setPdfGenerating] = useState(false)
+  const [analysisResults, setAnalysisResults] = useState(null)
   const reportRef = useRef(null)
   const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
   const baseUrl = apiBase.replace('/api', '')
@@ -13,6 +15,18 @@ function DownloadStep() {
 
   // Obtener la imagen capturada del Paso 4
   const capturedImage = sessionStorage.getItem('captured_image') || null
+
+  // Cargar resultados del análisis desde sessionStorage
+  useEffect(() => {
+    const stored = sessionStorage.getItem('analysis_results')
+    if (stored) {
+      try {
+        setAnalysisResults(JSON.parse(stored))
+      } catch (e) {
+        console.error('Error leyendo resultados:', e)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!imageId) {
@@ -28,7 +42,6 @@ function DownloadStep() {
   // Abrir imagen en nueva pestaña
   const handlePreview = () => {
     if (capturedImage) {
-      // Si es un Data URL muy largo, convertir a Blob URL
       if (capturedImage.startsWith('data:')) {
         const byteString = atob(capturedImage.split(',')[1])
         const mimeString = capturedImage.split(',')[0].split(':')[1].split(';')[0]
@@ -40,7 +53,6 @@ function DownloadStep() {
         const blob = new Blob([ab], { type: mimeString })
         const blobUrl = window.URL.createObjectURL(blob)
         window.open(blobUrl, '_blank')
-        // Limpiar el blob URL después de un tiempo
         setTimeout(() => window.URL.revokeObjectURL(blobUrl), 5000)
       } else {
         window.open(capturedImage, '_blank')
@@ -105,6 +117,13 @@ function DownloadStep() {
     }
   }
 
+  // Obtener valor de resultado de forma segura
+  const getResult = (key, decimals = 1) => {
+    const val = analysisResults?.[key]
+    if (val == null || isNaN(val)) return '--'
+    return `${parseFloat(val).toFixed(decimals)}`
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-4">Paso 5: Descargar Resultados</h2>
@@ -160,22 +179,228 @@ function DownloadStep() {
           )}
         </div>
 
-        {/* Tablas clínicas */}
+        {/* Tablas clínicas COMPLETAS */}
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-gray-700 mb-3">Resultados Clínicos</h3>
-          <div className="bg-gray-50 p-4 rounded border border-gray-200">
-            <p className="text-sm text-gray-600">
-              Los resultados del análisis cefalométrico se muestran a continuación.
-              Este reporte es una herramienta de apoyo educativo.
-            </p>
-            {/* Aquí se pueden agregar las tablas de resultados dinámicamente */}
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
-              <p className="text-sm text-yellow-800">
-                <strong>Nota:</strong> Para ver los valores detallados de los ángulos (SNA, SNB, ANB, Wits, etc.),
-                por favor regresa al Paso 4 donde se muestran todas las tablas clínicas.
-              </p>
+          <h3 className="text-lg font-semibold text-gray-700 mb-3">Resultados Clínicos Completos</h3>
+
+          {/* Diagnóstico de Clase Esqueletal */}
+          {analysisResults?.clase_esqueletal && (
+            <div className={`text-center py-2 px-4 rounded-lg border font-bold text-sm mb-4 ${
+              analysisResults.clase_esqueletal === 'Clase III'
+                ? 'bg-orange-100 text-orange-800 border-orange-300'
+                : analysisResults.clase_esqueletal === 'Clase II'
+                ? 'bg-red-100 text-red-800 border-red-300'
+                : 'bg-green-100 text-green-800 border-green-300'
+            }`}>
+              Diagnóstico Esqueletal: {analysisResults.clase_esqueletal}
+              {analysisResults?.ANB != null && ` (ANB: ${parseFloat(analysisResults.ANB).toFixed(1)}°, Wits: ${analysisResults.WITS != null ? parseFloat(analysisResults.WITS).toFixed(1) + 'mm' : 'N/A'})`}
             </div>
+          )}
+
+          {/* 1. Medidas Clase Esqueletal (SNA, SNB, ANB, Wits) */}
+          <div className="mb-6">
+            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">1. Medidas Clase Esqueletal</h4>
+            <table className="w-full text-sm border-collapse mb-4">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="text-left px-3 py-2 border-b">Medida</th>
+                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
+                  <th className="text-center px-3 py-2 border-b">Paciente</th>
+                  <th className="text-center px-3 py-2 border-b">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">SNA</td>
+                  <td className="text-center px-3 py-2 text-gray-500">82° (±3.5)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('SNA')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      analysisResults?.SNA_interp?.includes('Clase') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                    }`}>{analysisResults?.SNA_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">SNB</td>
+                  <td className="text-center px-3 py-2 text-gray-500">80° (±3.5)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('SNB')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      analysisResults?.SNB_interp?.includes('Clase') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                    }`}>{analysisResults?.SNB_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">ANB</td>
+                  <td className="text-center px-3 py-2 text-gray-500">2° (±2)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('ANB')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      analysisResults?.ANB_interp?.includes('Clase III') ? 'bg-orange-100 text-orange-800'
+                      : analysisResults?.ANB_interp?.includes('Clase II') ? 'bg-red-100 text-red-800'
+                      : 'bg-green-100 text-green-800'
+                    }`}>{analysisResults?.ANB_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Wits</td>
+                  <td className="text-center px-3 py-2 text-gray-500">0.5mm (±2.5)</td>
+                  <td className="text-center px-3 py-2 font-bold">{analysisResults?.WITS != null ? getResult('WITS') + 'mm' : '--'}</td>
+                  <td className="text-center px-3 py-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      analysisResults?.WITS_interp?.includes('Clase') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                    }`}>{analysisResults?.WITS_interp || '--'}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+
+          {/* 2. Inclinación Dental (Steiner & Ricketts) */}
+          <div className="mb-6">
+            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">2. Inclinación Dental (Steiner)</h4>
+            <table className="w-full text-sm border-collapse mb-4">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="text-left px-3 py-2 border-b">Medida</th>
+                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
+                  <th className="text-center px-3 py-2 border-b">Paciente</th>
+                  <th className="text-center px-3 py-2 border-b">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">1 Sup (Steiner)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">109° (±6)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('1_Sup')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      analysisResults?.Dental_1Sup_interp?.includes('↓') ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
+                    }`}>{analysisResults?.Dental_1Sup_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">1 Inf (Steiner)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">93° (±6)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('1_Inf')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      analysisResults?.Dental_1Inf_interp?.includes('↓') ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
+                    }`}>{analysisResults?.Dental_1Inf_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">1 Sup (Ricketts)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">110° (±5)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('Ricketts_1Sup')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Ricketts_1Sup_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">1 Inf (Ricketts)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">90° (±5)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('Ricketts_1Inf')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Ricketts_1Inf_interp || '--'}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* 3. Línea Estética de Ricketts */}
+          <div className="mb-6">
+            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">3. Línea Estética (Ricketts)</h4>
+            <table className="w-full text-sm border-collapse mb-4">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="text-left px-3 py-2 border-b">Medida</th>
+                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
+                  <th className="text-center px-3 py-2 border-b">Paciente</th>
+                  <th className="text-center px-3 py-2 border-b">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Ls - Línea E</td>
+                  <td className="text-center px-3 py-2 text-gray-500">-1mm (±2)</td>
+                  <td className="text-center px-3 py-2 font-bold">{analysisResults?.Ls_E != null ? `${analysisResults.Ls_E >= 0 ? '+' : ''}${parseFloat(analysisResults.Ls_E).toFixed(1)}mm` : '--'}</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Ls_E_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Li - Línea E</td>
+                  <td className="text-center px-3 py-2 text-gray-500">0mm (±2)</td>
+                  <td className="text-center px-3 py-2 font-bold">{analysisResults?.Li_E != null ? `${analysisResults.Li_E >= 0 ? '+' : ''}${parseFloat(analysisResults.Li_E).toFixed(1)}mm` : '--'}</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Li_E_interp || '--'}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* 4. Medidas Lineales Jarabak */}
+          <div className="mb-6">
+            <h4 className="text-md font-bold text-gray-700 mb-2 border-b pb-1">4. Medidas Lineales (Jarabak)</h4>
+            <table className="w-full text-sm border-collapse mb-4">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="text-left px-3 py-2 border-b">Medida</th>
+                  <th className="text-center px-3 py-2 border-b">Valor Normal</th>
+                  <th className="text-center px-3 py-2 border-b">Paciente</th>
+                  <th className="text-center px-3 py-2 border-b">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Silla (S-N-S-Ar)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">126° (±6)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('Silla')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Silla_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Articular (N-S-Ar)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">120° (±6)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('Articular')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Articular_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Goniaco (Ar-Go-Me)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">130° (±6)</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('Goniaco')}°</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Goniaco_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Base Craneal Ant (N-S)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">~70mm</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('Base_Craneal_Ant')}mm</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Base_Craneal_Ant_interp || '--'}</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-3 py-2">Cuerpo Mandibular (Go-Me)</td>
+                  <td className="text-center px-3 py-2 text-gray-500">~75mm</td>
+                  <td className="text-center px-3 py-2 font-bold">{getResult('Cuerpo_Mandibular')}mm</td>
+                  <td className="text-center px-3 py-2">
+                    <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">{analysisResults?.Cuerpo_Mandibular_interp || '--'}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* SteinerTable original (si está disponible) */}
+          {analysisResults && <SteinerTable results={analysisResults} />}
         </div>
 
         {/* Disclaimer */}
@@ -183,6 +408,16 @@ function DownloadStep() {
           <p className="text-xs text-gray-500">
             AI-Céfalo es una herramienta de apoyo educativo para estudiantes.
             Los resultados NO reemplazan el diagnóstico profesional certificado.
+          </p>
+        </div>
+
+        {/* Branding y Contacto del Desarrollador (Footer del PDF) */}
+        <div className="mt-6 pt-4 border-t-2 border-gray-400 text-center">
+          <p className="text-xs text-gray-600 font-semibold">
+            Software desarrollado por: <span className="text-gray-800">Anthony Mendoza - Ingeniero de Software</span>
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Contacto: tonymen157@gmail.com | Tel: 0995126586
           </p>
         </div>
       </div>

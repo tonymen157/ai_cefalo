@@ -12,13 +12,16 @@ function App() {
   const location = useLocation()
 
   useEffect(() => {
-    // Protección nativa: Si el usuario refresca la página (F5) en una ruta que no es la inicial,
-    // limpiamos el storage. Al recargar, los componentes (ej. UploadStep) no encontrarán los datos
-    // y su propia lógica interna los expulsará al paso 1. Esto evita crashear React Router.
+    // Prevención de pérdida de datos: advertir al usuario (no limpiar storage)
     const handleBeforeUnload = (e) => {
-      if (location.pathname !== '/' && location.pathname !== '/upload') {
-        sessionStorage.clear()
-        localStorage.clear()
+      const imageId = sessionStorage.getItem('image_id') || localStorage.getItem('image_id')
+      const landmarks = sessionStorage.getItem('landmarks')
+
+      // Solo advertir si hay datos cargados
+      if (imageId || (landmarks && landmarks !== '[]')) {
+        e.preventDefault()
+        e.returnValue = 'Es posible que los cambios no se guarden. ¿Estás seguro de que deseas recargar la página?'
+        return e.returnValue
       }
     }
 
