@@ -35,6 +35,17 @@ function ResultsStep() {
   const [editableLandmarks, setEditableLandmarks] = useState([])
   const [calibrationMmpp, setCalibrationMmpp] = useState(null)
 
+  // Persistir resultados en sessionStorage para el PDF
+  useEffect(() => {
+    if (analysisResults) {
+      try {
+        sessionStorage.setItem('analysis_results', JSON.stringify(analysisResults))
+      } catch (e) {
+        console.error('Error guardando resultados:', e)
+      }
+    }
+  }, [analysisResults])
+
   useEffect(() => {
     const landmarks = sessionStorage.getItem('landmarks')
     const mmpp = sessionStorage.getItem('calibration_mmpp')
@@ -111,17 +122,6 @@ function ResultsStep() {
     }
   }, [handleMoveLandmark])
 
-  // Persistir resultados en sessionStorage para el PDF
-  useEffect(() => {
-    if (analysisResults) {
-      try {
-        sessionStorage.setItem('analysis_results', JSON.stringify(analysisResults))
-      } catch (e) {
-        console.error('Error guardando resultados:', e)
-      }
-    }
-  }, [analysisResults])
-
   // Recálculo de análisis con landmarks editados
   const handleRecalculate = async () => {
     if (!calibrationMmpp || !editableLandmarks.length) return
@@ -141,15 +141,20 @@ function ResultsStep() {
     }
   }
 
-  // Capturar imagen del canvas y navegar a descarga
+  // Capturar imagen del canvas y navegar a descarga (SIN sessionStorage)
   const handleDownload = () => {
-    // Capturar el canvas usando toDataURL
     const canvas = document.querySelector('canvas')
+    let capturedDataUrl = null
     if (canvas) {
-      const dataUrl = canvas.toDataURL('image/png', 1.0)
-      sessionStorage.setItem('captured_image', dataUrl)
+      try {
+        // JPEG calidad 0.7 para balance tamaño/calidad
+        capturedDataUrl = canvas.toDataURL('image/jpeg', 0.7)
+      } catch (e) {
+        console.error('Error capturando canvas:', e)
+      }
     }
-    navigate('/download')
+    // Navegar pasando la imagen en el state (NO sessionStorage)
+    navigate('/download', { state: { capturedImage: capturedDataUrl } })
   }
 
   const handleResetLandmarks = async () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import html2pdf from 'html2pdf.js'
 import SteinerTable from './SteinerTable'
 
@@ -12,9 +12,10 @@ function DownloadStep() {
   const baseUrl = apiBase.replace('/api', '')
   const imageId = sessionStorage.getItem('image_id') || localStorage.getItem('image_id')
   const navigate = useNavigate()
+  const location = useLocation()
 
-  // Obtener la imagen capturada del Paso 4
-  const capturedImage = sessionStorage.getItem('captured_image') || null
+  // Obtener la imagen: primero de React Router state, luego sessionStorage (fallback)
+  const capturedImage = location.state?.capturedImage || sessionStorage.getItem('captured_image') || null
 
   // Cargar resultados del análisis desde sessionStorage
   useEffect(() => {
