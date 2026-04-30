@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
 import SteinerTable from './SteinerTable'
@@ -172,6 +172,21 @@ function ResultsStep() {
 
   if (loading) return <p className="text-center py-8">Calculando ángulos de Steiner...</p>
   if (error) return <p className="text-red-500 text-center py-8">{error}</p>
+
+  // Si no hay landmarks, mostrar mensaje en lugar de pantalla blanca
+  if (!editableLandmarks || editableLandmarks.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">No hay landmarks disponibles.</p>
+        <button
+          onClick={() => navigate('/upload')}
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          Volver a subir imagen
+        </button>
+      </div>
+    )
+  }
 
   const previewUrl = sessionStorage.getItem('preview_url')
   const imageId = sessionStorage.getItem('image_id')
