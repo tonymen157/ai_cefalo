@@ -37,3 +37,15 @@ __pycache__/
 # Hugging Face token (local only)
 .hf_token
 hf_token.txt
+
+# Frontend build output
+frontend/dist/
+
+# Trained models
+models/
+
+# Claude local settings
+.claude/settings.local.json
+
+# Temp files
+*.txt
