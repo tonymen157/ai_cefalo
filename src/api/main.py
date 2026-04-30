@@ -17,9 +17,13 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# CORS - Restringido (modificar ALLOWED_ORIGINS para producción)
+# CORS - Solo variable de entorno (sin defaults inseguros en producción)
 from os import getenv
-ALLOWED_ORIGINS = getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:8000,http://127.0.0.1:3000,http://127.0.0.1:3001").split(",")
+ALLOWED_ORIGINS = getenv("ALLOWED_ORIGINS", "")
+if ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS = ALLOWED_ORIGINS.split(",")
+else:
+    ALLOWED_ORIGINS = []  # Sin acceso por defecto si no se configura
 
 app.add_middleware(
     CORSMiddleware,

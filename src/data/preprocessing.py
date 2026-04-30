@@ -8,7 +8,35 @@ Pipeline: CLAHE -> NLM Denoising -> Z-score -> Resize con letterboxing.
 
 import cv2
 import numpy as np
+import hashlib
 from src.core.config import INPUT_SIZE_WH
+
+# Cache manual para NLM Denoising (max 10 imágenes en memoria)
+_nlm_cache = {}
+_MAX_CACHE_SIZE = 10
+
+
+def _hash_img(img):
+    """Genera hash MD5 de la imagen para usar como clave de caché."""
+    return hashlib.md5(img.tobytes()).hexdigest()
+
+
+def _nlmeans_denoise_cached(img, h, template_window, search_window):
+    """NLM con caché manual (evita recalcular la misma imagen)."""
+    key = _hash_img(img)
+    if key in _nlm_cache:
+        return _nlm_cache[key].copy()
+
+    result = cv2.fastNlMeansDenoising(
+        img, None, h=h,
+        templateWindowSize=template_window,
+        searchWindowSize=search_window
+    )
+
+    _nlm_cache[key] = result.copy()
+    if len(_nlm_cache) > _MAX_CACHE_SIZE:
+        _nlm_cache.pop(next(iter(_nlm_cache)))
+    return result
 
 
 def preprocess_xray(img: np.ndarray, target_size=None, config=None):
@@ -49,10 +77,12 @@ def preprocess_xray(img: np.ndarray, target_size=None, config=None):
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
     img = clahe.apply(img)
 
-    # NLM denoising
-    img = cv2.fastNlMeansDenoising(img, None, h=nlm_h,
-                                   templateWindowSize=nlm_template_window,
-                                   searchWindowSize=nlm_search_window)
+    # NLM denoising (con caché manual para evitar recálculo)
+    img = _nlmeans_denoise_cached(
+        img, h=nlm_h,
+        template_window=nlm_template_window,
+        search_window=nlm_search_window
+    )
 
     # Z-score normalization
     img = ((img - img.mean()) / (img.std() + 1e-8)).astype(np.float32)

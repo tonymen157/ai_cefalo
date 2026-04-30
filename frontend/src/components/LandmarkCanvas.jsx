@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import LANDMARKS from '../constants/landmarks'
+import { BASE_URL } from '../config'
 
 function LandmarkCanvas({
   imageId,
@@ -24,13 +25,13 @@ function LandmarkCanvas({
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 })
   const [hoverIdx, setHoverIdx] = useState(null)
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, text: '' })
+  const lastMoveTime = useRef(0)
+  const THROTTLE_MS = 33 // ~30 fps
 
   const getFinalUrl = () => {
-    const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
-    const baseUrl = apiBase.replace(/\/api$/, '')
     if (imageUrl && imageUrl.startsWith('http')) return imageUrl
-    if (imageUrl) return `${baseUrl}/${imageUrl.replace(/^\//, '')}`
-    if (imageId) return `${baseUrl}/api/preview/pred_${imageId}`
+    if (imageUrl) return `${BASE_URL}/${imageUrl.replace(/^\//, '')}`
+    if (imageId) return `${BASE_URL}/api/preview/pred_${imageId}`
     return null
   }
 
@@ -437,6 +438,10 @@ function LandmarkCanvas({
 
   // Mouse move - coordenadas dinámicas basadas en el tamaño real vs visual
   const handleMouseMove = useCallback((e) => {
+    const now = Date.now()
+    if (now - lastMoveTime.current < THROTTLE_MS) return
+    lastMoveTime.current = now
+
     const canvas = canvasRef.current
     if (!canvas || !imgSize.w) return
     const rect = canvas.getBoundingClientRect()

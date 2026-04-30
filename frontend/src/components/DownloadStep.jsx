@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import html2pdf from 'html2pdf.js'
 import SteinerTable from './SteinerTable'
+import { BASE_URL } from '../config'
 
 function DownloadStep() {
   const [loading, setDownloading] = useState(false)
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [analysisResults, setAnalysisResults] = useState(null)
   const reportRef = useRef(null)
-  const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
-  const baseUrl = apiBase.replace('/api', '')
+  const baseUrl = BASE_URL
   const imageId = sessionStorage.getItem('image_id') || localStorage.getItem('image_id')
   const navigate = useNavigate()
   const location = useLocation()
