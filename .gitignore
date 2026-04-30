@@ -44,6 +44,9 @@ frontend/dist/
 # Trained models
 models/
 
+# Private archive (medical images - NEVER commit)
+private_archive/
+
 # Claude local settings
 .claude/settings.local.json
 

@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi import HTTPException
 from src.api.database import init_db
@@ -33,9 +32,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir archivos subidos estáticamente
-app.mount("/api/uploads", StaticFiles(directory="data/uploads"), name="uploads")
-
 # Routers
 from src.api.routers.upload import router as upload_router
 from src.api.routers.calibrate import router as calibrate_router
@@ -43,6 +39,7 @@ from src.api.routers.analyze import router as analyze_router
 from src.api.routers.steiner import router as steiner_router
 from src.api.routers.credit import router as credit_router
 from src.api.routers.admin import router as admin_router
+from src.api.routers.images import router as images_router
 
 app.include_router(upload_router, prefix="/api")
 app.include_router(calibrate_router, prefix="/api/calibrate")
@@ -50,6 +47,7 @@ app.include_router(analyze_router, prefix="/api")
 app.include_router(steiner_router, prefix="/api")
 app.include_router(credit_router, prefix="/api")
 app.include_router(admin_router, prefix="/api/admin")
+app.include_router(images_router, prefix="/api")
 
 # Inicializar BD
 init_db()

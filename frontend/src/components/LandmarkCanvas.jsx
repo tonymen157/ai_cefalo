@@ -31,7 +31,7 @@ function LandmarkCanvas({
   const getFinalUrl = () => {
     if (imageUrl && imageUrl.startsWith('http')) return imageUrl
     if (imageUrl) return `${BASE_URL}/${imageUrl.replace(/^\//, '')}`
-    if (imageId) return `${BASE_URL}/api/preview/pred_${imageId}`
+    if (imageId) return `${BASE_URL}/api/images/pred_${imageId}`
     return null
   }
 

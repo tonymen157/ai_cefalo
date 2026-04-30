@@ -69,7 +69,7 @@ function DownloadStep() {
         window.open(capturedImage, '_blank')
       }
     } else if (imageId) {
-      window.open(`${baseUrl}/api/preview/pred_${imageId}`, '_blank')
+      window.open(`${baseUrl}/api/images/pred_${imageId}`, '_blank')
     }
   }
 
@@ -81,7 +81,7 @@ function DownloadStep() {
     }
 
     setDownloading(true)
-    const imageUrl = `${baseUrl}/api/preview/pred_${imageId}`
+    const imageUrl = `${baseUrl}/api/images/pred_${imageId}`
 
     try {
       const response = await fetch(imageUrl)
@@ -173,7 +173,7 @@ function DownloadStep() {
               <p className="text-gray-500">No hay imagen capturada disponible</p>
               {imageId && (
                 <img
-                  src={`${baseUrl}/api/preview/pred_${imageId}`}
+                  src={`${baseUrl}/api/images/pred_${imageId}`}
                   alt="Radiografía"
                   className="max-w-full mx-auto mt-4"
                   style={{ maxHeight: '400px' }}
