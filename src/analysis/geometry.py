@@ -26,6 +26,7 @@ class CephalometricAnalysis:
         self.IDX_SOFT_POGONION = 27   # Pog' (Soft Pogonion)
         self.IDX_NOSE_TIP = 28        # Sn (Subnasale/Nose Tip)
         self.IDX_MENTON = 3           # Me (Menton)
+        self.IDX_POGONION = 6          # Pog (Pogonion óseo)
 
     def get_point(self, idx):
         return self.coords[idx]
@@ -156,6 +157,7 @@ class CephalometricAnalysis:
         N = self.get_point(self.IDX_NASION)
         Go = self.get_point(self.IDX_GONION)
         Gn = self.get_point(self.IDX_GNATHION)
+        Pog = self.get_point(self.IDX_POGONION)       # Pogonion óseo (6)
 
         # Ángulo 1Sup-SN (suplementario dinámico)
         ang_1Sup_SN = 180 - self.angle_between_lines(S, N, A, U1)
@@ -171,10 +173,22 @@ class CephalometricAnalysis:
         if ang_inter < 90:
             ang_inter = 180 - ang_inter
 
+        # 1Sup-APg: Ángulo entre eje incisivo superior y línea A-Pg
+        ang_1Sup_APg = self.angle_between_lines(A, Pog, A, U1)
+        if ang_1Sup_APg > 90:
+            ang_1Sup_APg = 180 - ang_1Sup_APg
+
+        # 1Inf-APg: Ángulo entre eje incisivo inferior y línea A-Pg
+        ang_1Inf_APg = self.angle_between_lines(A, Pog, L1_apex, L1)
+        if ang_1Inf_APg > 90:
+            ang_1Inf_APg = 180 - ang_1Inf_APg
+
         return {
             "1Sup_SN": ang_1Sup_SN,
             "1Inf_PM": ang_IMPA,
-            "Interincisal": ang_inter
+            "Interincisal": ang_inter,
+            "1Sup_APg": ang_1Sup_APg,
+            "1Inf_APg": ang_1Inf_APg
         }
 
     def _clase_esqueletal(self, anb, wits):
@@ -264,6 +278,8 @@ class CephalometricAnalysis:
             "1Sup_SN": safe_round(dental["1Sup_SN"]),
             "1Inf_PM": safe_round(dental["1Inf_PM"]),
             "Interincisal": safe_round(dental["Interincisal"]),
+            "1Sup_APg": safe_round(dental["1Sup_APg"]),
+            "1Inf_APg": safe_round(dental["1Inf_APg"]),
             # Campo de diagnóstico coherente
             "clase_esqueletal": clase,
             "Silla_interp": jarabak_interp.get("Silla_clase"),

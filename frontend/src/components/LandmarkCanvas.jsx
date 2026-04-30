@@ -107,12 +107,7 @@ function LandmarkCanvas({
             drawLine(14, 13, '#F59E0B') // Go-Gn Plano Mandibular (Naranja)
           }
 
-          if (activeFilter === 'ricketts') {
-            // Línea E de Ricketts: Sn(28, Nose Tip) → Pog'(27, Soft Pogonion)
-            drawLine(28, 27, '#8B5CF6') // Morado
-          }
-
-          if (activeFilter === 'occlusal') {
+          if (activeFilter === 'wits') {
             // Plano Oclusal: punto medio molares → punto medio incisivos
             const molarMid = {
               x: (landmarks[18].x + landmarks[19].x) / 2,
@@ -123,13 +118,45 @@ function LandmarkCanvas({
               y: (landmarks[21].y + landmarks[17].y) / 2
             }
             if (molarMid && incisorMid) {
+              // Dibujar plano oclusal (rosa)
               ctx.beginPath()
-              ctx.strokeStyle = '#EC4899' // Rosa
+              ctx.strokeStyle = '#EC4899'
               ctx.lineWidth = dynamicLineWidth
               ctx.moveTo(molarMid.x, molarMid.y)
               ctx.lineTo(incisorMid.x, incisorMid.y)
               ctx.stroke()
+
+              // Función para proyectar un punto sobre una línea y dibujar la perpendicular
+              const drawPerp = (ptIdx) => {
+                const pt = landmarks[ptIdx]
+                if (!pt || pt.x == null) return
+                // Vector del plano oclusal
+                const vx = incisorMid.x - molarMid.x
+                const vy = incisorMid.y - molarMid.y
+                const vLen = Math.sqrt(vx * vx + vy * vy)
+                if (vLen === 0) return
+                // Proyección escalar
+                const t = ((pt.x - molarMid.x) * vx + (pt.y - molarMid.y) * vy) / (vLen * vLen)
+                const projX = molarMid.x + t * vx
+                const projY = molarMid.y + t * vy
+                // Dibujar perpendicular (cyan)
+                ctx.beginPath()
+                ctx.strokeStyle = '#06B6D4'
+                ctx.lineWidth = dynamicLineWidth
+                ctx.setLineDash([4, 4])
+                ctx.moveTo(pt.x, pt.y)
+                ctx.lineTo(projX, projY)
+                ctx.stroke()
+                ctx.setLineDash([])
+              }
+              drawPerp(0) // Perpendicular desde Punto A
+              drawPerp(2) // Perpendicular desde Punto B
             }
+          }
+
+          if (activeFilter === 'ricketts') {
+            // Línea E de Ricketts: Sn(28, Nose Tip) → Pog'(27, Soft Pogonion)
+            drawLine(28, 27, '#8B5CF6') // Morado
           }
 
           if (activeFilter === 'jarabak') {
