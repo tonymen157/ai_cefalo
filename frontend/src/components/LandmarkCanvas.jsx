@@ -62,7 +62,7 @@ function LandmarkCanvas({
     return () => { img.onload = null; img.onerror = null }
   }, [imageId, imageUrl])
 
-  // 2) Dibujar - secuencial e independiente por capas
+  // 2) Dibujar - estructura secuencial e independiente
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !imgLoaded || !imgRef.current || !imgSize.w) return
@@ -82,19 +82,61 @@ function LandmarkCanvas({
 
     try {
       ctx.save()
-      // Solo escalamos por dpr para nitidez (los datos ya están en coordenadas lógicas)
+      // Solo escalamos por dpr para nitidez
       ctx.scale(dpr, dpr)
 
       // Factor de escala dinámico basado en el ancho de la imagen
-      // Referencia: 1000px -> scaleFactor = 1.0
       const scaleFactor = imgSize.w / 1000
 
-      // Paso 1: Limpiar y dibujar imagen base
-      ctx.drawImage(imgRef.current, 0, 0, imgSize.w, imgSize.h)
+      // ---- FUNCIONES AUXILIARES (definidas fuera de condicionales) ----
 
       const valid = (p) => p && p.x != null && !isNaN(p.x) && !isNaN(p.y)
 
-      // Paso 2: Grilla (independiente)
+      // Función para dibujar etiquetas CON contorno (strokeText)
+      const drawLabel = (text, x, y, color, offsetX = 6, offsetY = -6) => {
+        if (!text && text !== 0) return
+        if (!showLabels) return
+
+        ctx.save()
+        const fSize = labelFontSize * scaleFactor
+        ctx.font = `bold ${fSize}px sans-serif`
+        ctx.textBaseline = 'top'
+
+        const lx = x + offsetX
+        const ly = y + offsetY
+
+        // Contorno negro para visibilidad
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
+        ctx.lineWidth = 3 * scaleFactor
+        ctx.lineJoin = 'round'
+        ctx.strokeText(text, lx, ly)
+
+        // Texto principal con color del trazado
+        ctx.fillStyle = color
+        ctx.fillText(text, lx, ly)
+
+        ctx.restore()
+      }
+
+      const lineWidth = 2.5 * scaleFactor
+
+      const drawLine = (idx1, idx2, color) => {
+        const p1 = landmarks[idx1]
+        const p2 = landmarks[idx2]
+        if (!valid(p1) || !valid(p2)) return
+        ctx.beginPath()
+        ctx.strokeStyle = color
+        ctx.lineWidth = lineWidth
+        ctx.moveTo(p1.x, p1.y)
+        ctx.lineTo(p2.x, p2.y)
+        ctx.stroke()
+      }
+
+      // ---- PASO 1: Limpiar y dibujar imagen base ----
+      ctx.clearRect(0, 0, imgSize.w, imgSize.h)
+      ctx.drawImage(imgRef.current, 0, 0, imgSize.w, imgSize.h)
+
+      // ---- PASO 2: Grilla (independiente) ----
       if (showGrid) {
         ctx.beginPath()
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
@@ -111,50 +153,10 @@ function LandmarkCanvas({
         ctx.stroke()
       }
 
-      // Paso 3: Líneas y etiquetas (independiente, NO bloquea puntos)
+      // ---- PASO 3: Líneas y trazados (independiente) ----
       if (showLines && landmarks.length >= 29) {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
         ctx.shadowBlur = 3 * scaleFactor
-
-        const lineWidth = 2.5 * scaleFactor
-
-        const drawLine = (idx1, idx2, color) => {
-          const p1 = landmarks[idx1]
-          const p2 = landmarks[idx2]
-          if (!valid(p1) || !valid(p2)) return
-          ctx.beginPath()
-          ctx.strokeStyle = color
-          ctx.lineWidth = lineWidth
-          ctx.moveTo(p1.x, p1.y)
-          ctx.lineTo(p2.x, p2.y)
-          ctx.stroke()
-        }
-
-        // Etiquetas sin recuadro - usa strokeText para contorno
-        const drawLabel = (text, x, y, color, offsetX = 6, offsetY = -6) => {
-          if (!text && text !== 0) return
-          if (!showLabels) return
-
-          ctx.save()
-          const fontSize = labelFontSize * scaleFactor
-          ctx.font = `bold ${fontSize}px sans-serif`
-          ctx.textBaseline = 'top'
-
-          const lx = x + offsetX
-          const ly = y + offsetY
-
-          // Contorno negro (stroke) para visibilidad
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
-          ctx.lineWidth = 3 * scaleFactor
-          ctx.lineJoin = 'round'
-          ctx.strokeText(text, lx, ly)
-
-          // Texto principal con color del trazado
-          ctx.fillStyle = color
-          ctx.fillText(text, lx, ly)
-
-          ctx.restore()
-        }
 
         const res = analysisResults || {}
 
@@ -170,22 +172,51 @@ function LandmarkCanvas({
           const aPt = landmarks[0]   // A-point
           const bPt = landmarks[2]   // B-point
 
+          // SNA: cerca de Nasion, arriba a la izquierda (offset geométrico)
           if (valid(nPt) && valid(sPt)) {
-            drawLabel(`${res.SNA?.toFixed(1) ?? '--'}°`,
-              nPt.x - 15 * scaleFactor, nPt.y - (fontSize || 13) * scaleFactor - 4 * scaleFactor, '#EF4444', -10 * scaleFactor, -4 * scaleFactor)
+            drawLabel(
+              `${res.SNA?.toFixed(1) ?? '--'}°`,
+              nPt.x - 20 * scaleFactor,
+              nPt.y - 15 * scaleFactor,
+              '#EF4444',
+              -20 * scaleFactor,
+              -15 * scaleFactor
+            )
           }
+          // SNB: cerca de Nasion, abajo a la derecha (no choca con SNA)
           if (valid(nPt) && valid(sPt)) {
-            drawLabel(`${res.SNB?.toFixed(1) ?? '--'}°`,
-              sPt.x + 8 * scaleFactor, sPt.y + 4 * scaleFactor, '#3B82F6', 8 * scaleFactor, 4 * scaleFactor)
+            drawLabel(
+              `${res.SNB?.toFixed(1) ?? '--'}°`,
+              nPt.x + 20 * scaleFactor,
+              nPt.y + 15 * scaleFactor,
+              '#3B82F6',
+              20 * scaleFactor,
+              15 * scaleFactor
+            )
           }
+          // ANB: a la derecha del Nasion
           if (valid(aPt) && valid(bPt) && valid(nPt)) {
             const anbText = res.ANB != null ? `ANB: ${res.ANB.toFixed(1)}°` : 'ANB: --°'
-            drawLabel(anbText,
-              Math.min(aPt.x, bPt.x) + 5 * scaleFactor, nPt.y - (fontSize || 13) * scaleFactor - 2 * scaleFactor, '#8B5CF6', 5 * scaleFactor, -2 * scaleFactor)
+            drawLabel(
+              anbText,
+              nPt.x + 30 * scaleFactor,
+              nPt.y,
+              '#8B5CF6',
+              30 * scaleFactor,
+              0
+            )
           }
+          // Wits: en el punto medio de la proyección, desplazado en Y
           if (res.WITS != null && valid(aPt)) {
             const witsText = `Wits: ${res.WITS >= 0 ? '+' : ''}${res.WITS.toFixed(1)}mm`
-            drawLabel(witsText, aPt.x + 10 * scaleFactor, aPt.y + (fontSize || 13) * scaleFactor + 6 * scaleFactor, '#06B6D4', 10 * scaleFactor, (fontSize || 13) * scaleFactor + 6 * scaleFactor)
+            drawLabel(
+              witsText,
+              aPt.x + 10 * scaleFactor,
+              aPt.y - 15 * scaleFactor,
+              '#06B6D4',
+              10 * scaleFactor,
+              -15 * scaleFactor
+            )
           }
         }
 
@@ -203,7 +234,16 @@ function LandmarkCanvas({
             ctx.moveTo(molarMid.x, molarMid.y)
             ctx.lineTo(incisorMid.x, incisorMid.y)
             ctx.stroke()
-            drawLabel('Plano Oclusal', molarMid.x + 8 * scaleFactor, molarMid.y - (fontSize || 13) * scaleFactor - 4 * scaleFactor, '#EC4899', 8 * scaleFactor, -4 * scaleFactor)
+
+            // Plano Oclusal: cerca del punto medio, desplazado
+            drawLabel(
+              'Plano Oclusal',
+              molarMid.x + 8 * scaleFactor,
+              molarMid.y - 20 * scaleFactor,
+              '#EC4899',
+              8 * scaleFactor,
+              -20 * scaleFactor
+            )
 
             const drawPerp = (ptIdx, label) => {
               const pt = landmarks[ptIdx]
@@ -225,7 +265,14 @@ function LandmarkCanvas({
               ctx.stroke()
               ctx.setLineDash([])
 
-              drawLabel(label, (pt.x + projX) / 2 + 6 * scaleFactor, (pt.y + projY) / 2 - (fontSize || 13) * scaleFactor / 2, '#06B6D4', 6 * scaleFactor, -(fontSize || 13) * scaleFactor / 2)
+              drawLabel(
+                label,
+                (pt.x + projX) / 2 + 6 * scaleFactor,
+                (pt.y + projY) / 2 - 10 * scaleFactor,
+                '#06B6D4',
+                6 * scaleFactor,
+                -10 * scaleFactor
+              )
             }
 
             if (res.WITS != null) {
@@ -241,20 +288,32 @@ function LandmarkCanvas({
         // --- RICKETTS ---
         if (activeFilter === 'ricketts') {
           drawLine(28, 27, '#8B5CF6') // Sn -> Pog' (Morado)
-          drawLabel('Linea E', (landmarks[28]?.x + landmarks[27]?.x) / 2 || 0,
-            ((landmarks[28]?.y + landmarks[27]?.y) / 2 || 0) - (fontSize || 13) * scaleFactor - 4 * scaleFactor, '#8B5CF6', 0, -4 * scaleFactor)
+
+          // Linea E: cerca del punto medio entre Sn y Pog'
+          const snPt = landmarks[28]
+          const pogPrimePt = landmarks[27]
+          if (valid(snPt) && valid(pogPrimePt)) {
+            drawLabel(
+              'Linea E',
+              (snPt.x + pogPrimePt.x) / 2 + 10 * scaleFactor,
+              (snPt.y + pogPrimePt.y) / 2 - 15 * scaleFactor,
+              '#8B5CF6',
+              10 * scaleFactor,
+              -15 * scaleFactor
+            )
+          }
 
           const lsPt = landmarks[25]
           const liPt = landmarks[24]
           if (res.Ls_E != null && valid(lsPt)) {
             const val = res.Ls_E.toFixed(1)
             const sign = res.Ls_E >= 0 ? '+' : ''
-            drawLabel(`Ls: ${sign}${val}mm`, lsPt.x + 10 * scaleFactor, lsPt.y, '#8B5CF6', 10 * scaleFactor, 0)
+            drawLabel(`Ls: ${sign}${val}mm`, lsPt.x + 20 * scaleFactor, lsPt.y, '#8B5CF6', 20 * scaleFactor, 0)
           }
           if (res.Li_E != null && valid(liPt)) {
             const val = res.Li_E.toFixed(1)
             const sign = res.Li_E >= 0 ? '+' : ''
-            drawLabel(`Li: ${sign}${val}mm`, liPt.x + 10 * scaleFactor, liPt.y, '#8B5CF6', 10 * scaleFactor, 0)
+            drawLabel(`Li: ${sign}${val}mm`, liPt.x + 20 * scaleFactor, liPt.y, '#8B5CF6', 20 * scaleFactor, 0)
           }
         }
 
@@ -275,19 +334,39 @@ function LandmarkCanvas({
           const drawAngle = (vIdx, txt) => {
             const v = landmarks[vIdx]
             if (!valid(v)) return
-            drawLabel(txt, v.x + 8 * scaleFactor, v.y - (fontSize || 13) * scaleFactor - 2 * scaleFactor, '#10B981', 8 * scaleFactor, -2 * scaleFactor)
+            drawLabel(
+              txt,
+              v.x + 8 * scaleFactor,
+              v.y - 15 * scaleFactor,
+              '#10B981',
+              8 * scaleFactor,
+              -15 * scaleFactor
+            )
           }
           if (res.Silla != null) drawAngle(10, `Silla: ${res.Silla.toFixed(1)}°`)
           if (res.Articular != null) drawAngle(11, `Art: ${res.Articular.toFixed(1)}°`)
           if (res.Goniaco != null) drawAngle(14, `Gon: ${res.Goniaco.toFixed(1)}°`)
 
+          // Inclinaciones dentales: cerca del ápice/corona, sumando +20 en X
           if (res.Base_Craneal_Ant != null && valid(landmarks[4]) && valid(landmarks[10])) {
-            drawLabel(`N-S: ${res.Base_Craneal_Ant.toFixed(1)}mm`,
-              (landmarks[4].x + landmarks[10].x) / 2, (landmarks[4].y + landmarks[10].y) / 2 + 4 * scaleFactor, '#10B981', 0, 4 * scaleFactor)
+            drawLabel(
+              `N-S: ${res.Base_Craneal_Ant.toFixed(1)}mm`,
+              (landmarks[4].x + landmarks[10].x) / 2 + 20 * scaleFactor,
+              (landmarks[4].y + landmarks[10].y) / 2,
+              '#10B981',
+              20 * scaleFactor,
+              0
+            )
           }
           if (res.Cuerpo_Mandibular != null && valid(landmarks[14]) && valid(landmarks[3])) {
-            drawLabel(`Go-Me: ${res.Cuerpo_Mandibular.toFixed(1)}mm`,
-              (landmarks[14].x + landmarks[3].x) / 2, (landmarks[14].y + landmarks[3].y) / 2 + 4 * scaleFactor, '#10B981', 0, 4 * scaleFactor)
+            drawLabel(
+              `Go-Me: ${res.Cuerpo_Mandibular.toFixed(1)}mm`,
+              (landmarks[14].x + landmarks[3].x) / 2 + 20 * scaleFactor,
+              (landmarks[14].y + landmarks[3].y) / 2,
+              '#10B981',
+              20 * scaleFactor,
+              0
+            )
           }
         }
 
@@ -295,7 +374,7 @@ function LandmarkCanvas({
         ctx.shadowBlur = 0
       }
 
-      // Paso 4: Puntos (colores ESTRICTOS por categoría) - SIEMPRE se dibujan si showPoints es true
+      // ---- PASO 4: Puntos (colores ESTRICTOS por categoría) ----
       if (showPoints) {
         const dynRadius = (pointRadius ?? Math.max(4, Math.min(12, imgSize.w / 150))) * scaleFactor
         landmarks.forEach((lm, idx) => {
@@ -312,12 +391,12 @@ function LandmarkCanvas({
         })
       }
 
-      // Tooltip
+      // ---- PASO 5: Tooltip ----
       if (hoverIdx !== null && tooltip.show) {
         const info = LANDMARKS[hoverIdx]
         if (info) {
-          const fontSize = 14 * scaleFactor
-          ctx.font = `${fontSize}px sans-serif`
+          const fSize = 14 * scaleFactor
+          ctx.font = `${fSize}px sans-serif`
           const text = `${info.id}: ${info.name}`
           const metrics = ctx.measureText(text)
           const padX = 12 * scaleFactor
@@ -336,7 +415,7 @@ function LandmarkCanvas({
     } catch (e) {
       console.error('Error dibujando canvas:', e)
     }
-  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, pointRadius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilter, analysisResults, labelFontSize, showLabels])
+  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, showLabels, pointRadius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilter, analysisResults, labelFontSize])
 
   // Teclado
   useEffect(() => {
@@ -363,7 +442,6 @@ function LandmarkCanvas({
     const rect = canvas.getBoundingClientRect()
 
     // Factor de escala: el canvas puede estar escalado por CSS (width: 100%)
-    // imgSize.w es el tamaño lógico, rect.width es el tamaño visual
     const scaleX = imgSize.w / rect.width
     const scaleY = imgSize.h / rect.height
 
