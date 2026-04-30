@@ -32,14 +32,22 @@ class CephalometricAnalysis:
     def calculate_angle(self, point_a, vertex, point_b, en_grados=True):
         v1 = np.array([point_a[0] - vertex[0], point_a[1] - vertex[1]])
         v2 = np.array([point_b[0] - vertex[0], point_b[1] - vertex[1]])
-        cos_theta = np.clip(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)), -1.0, 1.0)
+        norm_v1 = np.linalg.norm(v1)
+        norm_v2 = np.linalg.norm(v2)
+        if norm_v1 == 0 or norm_v2 == 0:
+            return 0.0
+        cos_theta = np.clip(np.dot(v1, v2) / (norm_v1 * norm_v2), -1.0, 1.0)
         angulo = np.arccos(cos_theta)
         return float(np.degrees(angulo)) if en_grados else float(angulo)
 
     def angle_between_lines(self, p1, p2, p3, p4):
         v1 = np.array(p2) - np.array(p1)
         v2 = np.array(p4) - np.array(p3)
-        cos_theta = np.clip(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)), -1.0, 1.0)
+        norm_v1 = np.linalg.norm(v1)
+        norm_v2 = np.linalg.norm(v2)
+        if norm_v1 == 0 or norm_v2 == 0:
+            return 0.0
+        cos_theta = np.clip(np.dot(v1, v2) / (norm_v1 * norm_v2), -1.0, 1.0)
         return float(np.degrees(np.arccos(cos_theta)))
 
     def dist_mm(self, p1, p2):
@@ -100,6 +108,8 @@ class CephalometricAnalysis:
             # Distancia perpendicular pura
             num = abs((Pos[0]-Pn[0])*(Pn[1]-point[1]) - (Pn[0]-point[0])*(Pos[1]-Pn[1]))
             den = np.linalg.norm(Pos - Pn)
+            if den == 0:
+                return 0.0
             return sign * (num / den) * self.escala_mm
 
         return {"Ls_E": dist_to_eline(Ls), "Li_E": dist_to_eline(Li)}
@@ -161,7 +171,16 @@ class CephalometricAnalysis:
 
         # Diccionario maestro para el Radar Recursivo de React
         def safe_round(val, decimals=2):
-            return round(val, decimals) if val is not None else None
+            if val is None:
+                return None
+            try:
+                # Manejar numpy floats y Python floats (nan, inf)
+                float_val = float(val)
+                if math.isnan(float_val) or math.isinf(float_val):
+                    return None
+                return round(float_val, decimals)
+            except (ValueError, TypeError):
+                return None
 
         result = {
             "SNA": safe_round(self.angulo_sna()),
