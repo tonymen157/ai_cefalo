@@ -1,332 +1,186 @@
-"""
-Modulo de geometria analitica cefalométrica.
-
-Calculo de angulos, distancias y analisis de Steiner (SNA, SNB, ANB)
-utilizando nombres de landmarks desde src.core.landmarks.
-
-Autor: AI-Cefalo - Fase 4
-Fecha: 2026-04-27
-CORREGIDO: Vértices de Steiner corregidos (Nasion como vértice).
-"""
-
-from typing import Dict, Tuple, Optional
 import numpy as np
-
-from src.core.landmarks import NAME_TO_IDX, LANDMARK_NAMES, FULL_NAMES
-from src.core.config import NUM_LANDMARKS, INPUT_SIZE_WH
-
-
-# ============================================================================
-# Funciones puras de geometria
-# ============================================================================
-
-def calculate_angle(
-    point_a: Tuple[float, float],
-    vertex: Tuple[float, float],
-    point_b: Tuple[float, float],
-    en_grados: bool = True
-) -> float:
-    """
-    Calcula el angulo entre dos vectores: (vertex->point_a) y (vertex->point_b).
-
-    El angulo se mide en el vértice entre los dos puntos.
-
-    Usa producto escalar:
-        cos(theta) = (v1·v2) / (|v1|·|v2|)
-    donde v1 = point_a - vertex, v2 = point_b - vertex.
-
-    Args:
-        point_a: primer punto
-        vertex: vertice del angulo
-        point_b: segundo punto
-        en_grados: si True devuelve grados, si False radianes
-
-    Returns:
-        Angulo en el vertice.
-    """
-    v1 = np.array([point_a[0] - vertex[0], point_a[1] - vertex[1]], dtype=np.float64)
-    v2 = np.array([point_b[0] - vertex[0], point_b[1] - vertex[1]], dtype=np.float64)
-
-    norma_v1 = np.linalg.norm(v1)
-    norma_v2 = np.linalg.norm(v2)
-
-    if norma_v1 == 0 or norma_v2 == 0:
-        return 0.0
-
-    cos_theta = np.clip(np.dot(v1, v2) / (norma_v1 * norma_v2), -1.0, 1.0)
-    angulo = np.arccos(cos_theta)
-
-    if en_grados:
-        angulo = np.degrees(angulo)
-
-    return float(angulo)
-
-
-def distancia_euclidiana(p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
-    """
-    Calcula la distancia euclidiana (L2) entre dos puntos 2D.
-
-    Args:
-        p1: (x, y) primer punto
-        p2: (x, y) segundo punto
-
-    Returns:
-        Distancia en píxeles (o mm si las coordenadas están calibradas).
-    """
-    return float(np.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2))
-
-
-def distancia_landmarks(
-    coords: np.ndarray,
-    nombre1: str,
-    nombre2: str
-) -> float:
-    """
-    Distancia entre dos landmarks dados sus nombres.
-
-    Args:
-        coords: array (N, 2) de coordenadas, N >= número del landmark
-        nombre1: nombre del primer landmark (p. ej. "S")
-        nombre2: nombre del segundo landmark (p. ej. "N")
-
-    Returns:
-        Distancia euclidiana.
-    """
-    idx1 = NAME_TO_IDX[nombre1]
-    idx2 = NAME_TO_IDX[nombre2]
-    p1 = (coords[idx1, 0], coords[idx1, 1])
-    p2 = (coords[idx2, 0], coords[idx2, 1])
-    return distancia_euclidiana(p1, p2)
-
-
-def angulo_landmarks(
-    coords: np.ndarray,
-    vertice: str,
-    extremo1: str,
-    extremo2: str
-) -> float:
-    """
-    Angulo entre tres landmarks, con el vertice en el centro.
-
-    Args:
-        coords: array (N, 2) de coordenadas
-        vertice: nombre del landmark que hace de vertice
-        extremo1: primer extremo
-        extremo2: segundo extremo
-
-    Returns:
-        Angulo en grados.
-    """
-    idx_v = NAME_TO_IDX[vertice]
-    idx_1 = NAME_TO_IDX[extremo1]
-    idx_2 = NAME_TO_IDX[extremo2]
-    p_v = (coords[idx_v, 0], coords[idx_v, 1])
-    p_1 = (coords[idx_1, 0], coords[idx_1, 1])
-    p_2 = (coords[idx_2, 0], coords[idx_2, 1])
-    return calculate_angle(p_1, p_v, p_2, en_grados=True)
-
-
-# ============================================================================
-# Clase analisis cefalometrico de Steiner (CORREGIDO)
-# ============================================================================
+import math
 
 class CephalometricAnalysis:
-    """
-    Analisis cefalometrico estandar (Steiner / Ricketts).
-
-    Calculo automatico de angulos clave a partir de 29 landmarks
-    (estandar Aariz):
-
-    - SNA: angulo en N (Nasion) entre S-N y N-A (evalua maxilar)
-    - SNB: angulo en N (Nasion) entre S-N y N-B (evalua mandibula)
-    - ANB: diferencia SNA - SNB (clase esqueletica)
-
-    Atributos
-    ----------
-    coords : np.ndarray
-        Array (29, 2) con coordenadas (x, y) normalizadas [0, 1]
-        o en pixeles.
-    nombre_imagen : str
-        Nombre del archivo de la radiografia.
-    escala_mm : float | None
-        Pixel size (mm/pixel) para conversion a milimetros.
-        Si es None, las distancias se reportan en pixeles.
-    """
-
-    ANGULOS_STEINER = {
-        "SNA": ("S", "N", "A"),
-        "SNB": ("S", "N", "B"),
-        "ANB": ("A", "N", "B"),
-    }
-
-    NORMATIVOS = {
-        "SNA": ("82.0 +/- 2.0", 80.0, 84.0),
-        "SNB": ("80.0 +/- 2.0", 78.0, 82.0),
-        "ANB": ("2.0 +/- 2.0", 0.0, 4.0),  # Clase I: 0.0 a 4.0
-    }
-
-    def __init__(
-        self,
-        coords: np.ndarray,
-        nombre_imagen: str = "imagen",
-        escala_mm: Optional[float] = None
-    ):
-        if coords.shape[0] != len(LANDMARK_NAMES):
-            raise ValueError(
-                f"Se esperaban {len(LANDMARK_NAMES)} landmarks, "
-                f"se recibieron {coords.shape[0]}"
-            )
-        self.coords = coords.astype(np.float64)
+    def __init__(self, coords, nombre_imagen="", escala_mm=None):
+        self.coords = coords  # Array de 29 landmarks [x, y]
         self.nombre_imagen = nombre_imagen
-        self.escala_mm = escala_mm
+        self.escala_mm = escala_mm  # mm por píxel
 
-    @property
-    def num_landmarks(self) -> int:
-        return self.coords.shape[0]
+        # Índices de landmarks críticos
+        self.IDX_A_POINT = 0
+        self.IDX_B_POINT = 2
+        self.IDX_ARTICULARE = 3
+        self.IDX_NASION = 4
+        self.IDX_INCISOR_SUP = 5
+        self.IDX_INCISOR_INF = 8
+        self.IDX_GONION = 9
+        self.IDX_SELLA = 10
+        self.IDX_MOLAR_INF = 11
+        self.IDX_MOLAR_SUP = 12
+        self.IDX_PORION = 13
+        self.IDX_GNATHION = 14
+        self.IDX_UPPER_LIP = 17
+        self.IDX_LOWER_LIP = 18
+        self.IDX_SOFT_POGONION = 20
+        self.IDX_NOSE_TIP = 21
+        self.IDX_MENTON = 24
 
-    @property
-    def pixel_size(self) -> Optional[float]:
-        return self.escala_mm
+    def get_point(self, idx):
+        return self.coords[idx]
 
-    def distancia(self, nombre1: str, nombre2: str) -> float:
-        return distancia_landmarks(self.coords, nombre1, nombre2)
+    def calculate_angle(self, point_a, vertex, point_b, en_grados=True):
+        v1 = np.array([point_a[0] - vertex[0], point_a[1] - vertex[1]])
+        v2 = np.array([point_b[0] - vertex[0], point_b[1] - vertex[1]])
+        cos_theta = np.clip(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)), -1.0, 1.0)
+        angulo = np.arccos(cos_theta)
+        return float(np.degrees(angulo)) if en_grados else float(angulo)
 
-    def angulo(self, vertice: str, extremo1: str, extremo2: str) -> float:
-        return angulo_landmarks(self.coords, vertice, extremo1, extremo2)
+    def angle_between_lines(self, p1, p2, p3, p4):
+        v1 = np.array(p2) - np.array(p1)
+        v2 = np.array(p4) - np.array(p3)
+        cos_theta = np.clip(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)), -1.0, 1.0)
+        return float(np.degrees(np.arccos(cos_theta)))
 
-    # --- ANGULOS DE STEINER (con vertice CORRECTO en Nasion) ---
-    def angulo_sna(self) -> float:
-        """
-        SNA = angulo en N (Nasion) entre los puntos S (Sella) y A (Punto A).
+    def dist_mm(self, p1, p2):
+        if not self.escala_mm:
+            return None
+        return float(np.linalg.norm(np.array(p1) - np.array(p2)) * self.escala_mm)
 
-        Forma correcta: angulo S-N-A con vertice en N.
-        Mide la posicion anteroposterior del maxilar superior.
-        Normativo: 82.0 +/- 2.0 grados.
-        """
-        # Vértice = N (índice IDX_NASION), extremos = S y A
-        return angulo_landmarks(self.coords, "N", "S", "A")
+    def angulo_sna(self):
+        return self.calculate_angle(self.get_point(self.IDX_SELLA), self.get_point(self.IDX_NASION), self.get_point(self.IDX_A_POINT))
 
-    def angulo_snb(self) -> float:
-        """
-        SNB = angulo en N (Nasion) entre los puntos S (Sella) y B (Punto B).
+    def angulo_snb(self):
+        return self.calculate_angle(self.get_point(self.IDX_SELLA), self.get_point(self.IDX_NASION), self.get_point(self.IDX_B_POINT))
 
-        Forma correcta: angulo S-N-B con vertice en N.
-        Mide la posicion anteroposterior de la mandibula.
-        Normativo: 80.0 +/- 2.0 grados.
-        """
-        # Vértice = N (índice IDX_NASION), extremos = S y B
-        return angulo_landmarks(self.coords, "N", "S", "B")
+    def wits_analysis(self):
+        if not self.escala_mm:
+            return None
+        A = np.array(self.get_point(self.IDX_A_POINT))
+        B = np.array(self.get_point(self.IDX_B_POINT))
 
-    def angulo_anb(self) -> float:
-        """
-        ANB = diferencia SNA - SNB.
+        # Plano Oclusal (Proxy): Punto medio molares a punto medio incisivos
+        molar_mid = (np.array(self.get_point(self.IDX_MOLAR_SUP)) + np.array(self.get_point(self.IDX_MOLAR_INF))) / 2.0
+        incisor_mid = (np.array(self.get_point(self.IDX_INCISOR_SUP)) + np.array(self.get_point(self.IDX_INCISOR_INF))) / 2.0
 
-        Clase esqueletica:
-        - Clase I:   ANB = 2.0 +/- 2.0 (0.0 a 4.0)
-        - Clase II:  ANB > 4.0 (maxilar relativo prominente)
-        - Clase III: ANB < 0.0 (mandibula relativo prominente)
-        """
-        sna = self.angulo_sna()
-        snb = self.angulo_snb()
-        return sna - snb
+        # Vector direccional del plano oclusal
+        v_op = incisor_mid - molar_mid
+        len_op = np.linalg.norm(v_op)
+        if len_op == 0:
+            return 0.0
+        v_op_unit = v_op / len_op
 
-    def angulos_steiner(self) -> Dict[str, float]:
+        # Proyección escalar ortogonal
+        proj_A = np.dot(A - molar_mid, v_op_unit)
+        proj_B = np.dot(B - molar_mid, v_op_unit)
+
+        # Diferencia en mm (Positivo = A por delante de B)
+        return float((proj_A - proj_B) * self.escala_mm)
+
+    def ricketts_estetico(self):
+        if not self.escala_mm:
+            return {"Ls_E": None, "Li_E": None}
+        Pn = np.array(self.get_point(self.IDX_NOSE_TIP))
+        Pos = np.array(self.get_point(self.IDX_SOFT_POGONION))
+        Ls = np.array(self.get_point(self.IDX_UPPER_LIP))
+        Li = np.array(self.get_point(self.IDX_LOWER_LIP))
+
+        # Determinar si la cara mira a la derecha o izquierda dinámicamente
+        is_right_facing = Pn[0] > self.get_point(self.IDX_PORION)[0]
+
+        def dist_to_eline(point):
+            # Calcular X sobre la recta en el mismo Y del labio
+            if Pos[1] != Pn[1]:
+                x_line = Pn[0] + (Pos[0] - Pn[0]) * (point[1] - Pn[1]) / (Pos[1] - Pn[1])
+                # Signo basado en la orientación del paciente
+                sign = 1 if (point[0] > x_line and is_right_facing) or (point[0] < x_line and not is_right_facing) else -1
+            else:
+                sign = 1
+
+            # Distancia perpendicular pura
+            num = abs((Pos[0]-Pn[0])*(Pn[1]-point[1]) - (Pn[0]-point[0])*(Pos[1]-Pn[1]))
+            den = np.linalg.norm(Pos - Pn)
+            return sign * (num / den) * self.escala_mm
+
+        return {"Ls_E": dist_to_eline(Ls), "Li_E": dist_to_eline(Li)}
+
+    def jarabak_analysis(self):
+        N = self.get_point(self.IDX_NASION)
+        S = self.get_point(self.IDX_SELLA)
+        Ar = self.get_point(self.IDX_ARTICULARE)
+        Go = self.get_point(self.IDX_GONION)
+        Me = self.get_point(self.IDX_MENTON)
+
+        ang_silla = self.calculate_angle(N, S, Ar)
+        ang_articular = self.calculate_angle(S, Ar, Go)
+        ang_goniaco = self.calculate_angle(Ar, Go, Me)
+
         return {
-            "SNA": self.angulo_sna(),
-            "SNB": self.angulo_snb(),
-            "ANB": self.angulo_anb(),
+            "Base_Craneal_Ant": self.dist_mm(N, S),
+            "Base_Craneal_Post": self.dist_mm(S, Ar),
+            "Altura_Rama": self.dist_mm(Ar, Go),
+            "Cuerpo_Mandibular": self.dist_mm(Go, Me),
+            "Altura_Facial_Ant": self.dist_mm(N, Me),
+            "Silla": ang_silla,
+            "Articular": ang_articular,
+            "Goniaco": ang_goniaco,
+            "Suma_Angulos": ang_silla + ang_articular + ang_goniaco
         }
 
-    def clase_esqueletica(self) -> str:
-        anb = self.angulo_anb()
-        if anb > 4.0:
-            return "Clase II"
-        elif anb < 0.0:
-            return "Clase III"
-        return "Clase I"  # 0.0 <= anb <= 4.0
+    def dental_inclination(self):
+        A = self.get_point(self.IDX_A_POINT)
+        B = self.get_point(self.IDX_B_POINT)
+        U1 = self.get_point(self.IDX_INCISOR_SUP)
+        L1 = self.get_point(self.IDX_INCISOR_INF)
+        S = self.get_point(self.IDX_SELLA)
+        N = self.get_point(self.IDX_NASION)
+        Go = self.get_point(self.IDX_GONION)
+        Gn = self.get_point(self.IDX_GNATHION)
 
-    def evaluacion_steiner(self) -> Dict[str, Dict[str, float]]:
-        resultados = {}
-        angulos = self.angulos_steiner()
-        for nombre, (_, lim_inf, lim_sup) in self.NORMATIVOS.items():
-            valor = angulos[nombre]
-            dentro = lim_inf <= valor <= lim_sup
-            resultados[nombre] = {
-                "valor": round(valor, 2),
-                "limite": self.NORMATIVOS[nombre][0],
-                "lim_inf": lim_inf,
-                "lim_sup": lim_sup,
-                "dentro": dentro,
-                "estado": "OK" if dentro else "FUERA",
-            }
-        return resultados
+        # Ángulos suplementarios dinámicos
+        ang_1Sup_SN = 180 - self.angle_between_lines(S, N, A, U1)
+        ang_IMPA = self.angle_between_lines(Go, Gn, B, L1)
+        if ang_IMPA > 90:
+            ang_IMPA = 180 - ang_IMPA
+        ang_inter = self.angle_between_lines(A, U1, B, L1)
+        if ang_inter < 90:
+            ang_inter = 180 - ang_inter
 
-    def reporte_texto(self, precision: int = 2) -> str:
-        sep = "-" * 48
-        line = f"\n{sep}\n"
-        partes = [
-            line,
-            "  ANALISIS CEFALOMETRICO DE STEINER",
-            line,
-            f"  Imagen   : {self.nombre_imagen}",
-            f"  Landmarks: {self.num_landmarks}",
-        ]
-
-        if self.escala_mm is not None:
-            partes.append(f"  Escala   : {self.escala_mm:.4f} mm/pixel")
-        else:
-            partes.append(f"  Escala   : sin calibrar (pixeles)")
-
-        partes.extend([
-            line,
-            "  Angulos (grados) - Vertice en N (Nasion):",
-        ])
-
-        angulos = self.angulos_steiner()
-        for nombre, valor in angulos.items():
-            norm = self.NORMATIVOS[nombre][0]
-            dentro = self.NORMATIVOS[nombre][1] <= valor <= self.NORMATIVOS[nombre][2]
-            marca = "OK" if dentro else "FUERA"
-            partes.append(
-                f"    {nombre:4s} = {valor:{precision + 3}.{precision}f} deg  "
-                f"  (normativo {norm})  [{marca}]"
-            )
-
-        partes.extend([
-            line,
-            f"  Clase esqueletica : {self.clase_esqueletica()}",
-            line,
-        ])
-
-        return "\n".join(partes)
-
-    def reporte_json(self) -> Dict:
-        angulos = self.angulos_steiner()
-        evaluacion = self.evaluacion_steiner()
         return {
-            "imagen": self.nombre_imagen,
-            "num_landmarks": self.num_landmarks,
-            "pixel_size_mm": self.escala_mm,
-            "angulos": {k: round(v, 4) for k, v in angulos.items()},
-            "clase_esqueletica": self.clase_esqueletica(),
-            "evaluacion": evaluacion,
+            "1Sup_SN": ang_1Sup_SN,
+            "1Inf_PM": ang_IMPA,
+            "Interincisal": ang_inter
         }
 
+    def reporte_json(self):
+        # Ejecutar matemáticas
+        wits = self.wits_analysis()
+        ricketts = self.ricketts_estetico()
+        jarabak = self.jarabak_analysis()
+        dental = self.dental_inclination()
 
-def analisis_rapido(
-    coords: np.ndarray,
-    nombre: str = "imagen",
-    escala_mm: Optional[float] = None,
-    imprimir: bool = True
-) -> CephalometricAnalysis:
-    analisis = CephalometricAnalysis(coords, nombre, escala_mm)
-    if imprimir:
-        print(analisis.reporte_texto())
-    return analisis
+        # Diccionario maestro para el Radar Recursivo de React
+        def safe_round(val, decimals=2):
+            return round(val, decimals) if val is not None else None
 
-
-if __name__ == "__main__":
-    print("Demostracion del modulo geometry.py\n")
-    np.random.seed(42)
-    demo_coords = np.random.rand(NUM_LANDMARKS, 2) * INPUT_SIZE_WH[0]
-    analisis = analisis_rapido(demo_coords, "demo.png", escala_mm=0.115, imprimir=True)
+        result = {
+            "SNA": safe_round(self.angulo_sna()),
+            "SNB": safe_round(self.angulo_snb()),
+            "ANB": safe_round(self.angulo_sna() - self.angulo_snb()),
+            "WITS": safe_round(wits),
+            "Ls_E": safe_round(ricketts["Ls_E"]),
+            "Li_E": safe_round(ricketts["Li_E"]),
+            "Base_Craneal_Ant": safe_round(jarabak["Base_Craneal_Ant"]),
+            "Base_Craneal_Post": safe_round(jarabak["Base_Craneal_Post"]),
+            "Altura_Rama": safe_round(jarabak["Altura_Rama"]),
+            "Cuerpo_Mandibular": safe_round(jarabak["Cuerpo_Mandibular"]),
+            "Altura_Facial_Ant": safe_round(jarabak["Altura_Facial_Ant"]),
+            "Silla": safe_round(jarabak["Silla"]),
+            "Articular": safe_round(jarabak["Articular"]),
+            "Goniaco": safe_round(jarabak["Goniaco"]),
+            "Suma_Angulos": safe_round(jarabak["Suma_Angulos"]),
+            "1Sup_SN": safe_round(dental["1Sup_SN"]),
+            "1Inf_PM": safe_round(dental["1Inf_PM"]),
+            "Interincisal": safe_round(dental["Interincisal"])
+        }
+        return result

@@ -18,14 +18,14 @@ router = APIRouter()
 
 @router.post("/steiner-analysis")
 def steiner_analysis(data: dict):
-    """Calculate Steiner analysis angles from landmarks using CephalometricAnalysis.
+    """Calculate cephalometric analysis from landmarks using CephalometricAnalysis.
 
     Body parameters:
     - landmarks: (29, 2) array in original image coordinates (pixels)
     - calibration_mmpp: pixel size in mm/pixel for metric calculation (optional)
 
     Returns:
-        dict with SNA, SNB, ANB, skeletal_class and evaluation vs normatives.
+        dict with SNA, SNB, ANB, WITS, Ricketts, Jarabak, and dental inclination.
     """
     try:
         landmarks = data.get("landmarks")
@@ -57,7 +57,7 @@ def steiner_analysis(data: dict):
 
 
 def _generate_pdf_buffer(landmarks, steiner_results, image_id):
-    """Genera PDF en memoria."""
+    """Genera PDF en memoria con el nuevo formato plano."""
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
@@ -73,21 +73,66 @@ def _generate_pdf_buffer(landmarks, steiner_results, image_id):
     c.drawCentredString(0, 0, "PREVIEW")
     c.restoreState()
     y = height - 140
+
+    # Steiner Analysis
     c.setFont("Helvetica-Bold", 12)
     c.drawString(50, y, "Steiner Analysis")
     y -= 30
     c.setFont("Helvetica", 10)
-    if isinstance(steiner_results, dict):
-        angulos = steiner_results.get("angulos", {})
-        for angle_name, data in angulos.items():
-            if isinstance(data, dict) and "value" in data:
-                text = f"{angle_name}: {data['value']:.2f}°"
-                c.drawString(70, y, text)
-                y -= 20
-        classification = steiner_results.get("clase_esqueletica", "N/A")
-        y -= 10
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(50, y, f"Classification: {classification}")
+
+    steiner_keys = ["SNA", "SNB", "ANB", "WITS"]
+    for key in steiner_keys:
+        if key in steiner_results and steiner_results[key] is not None:
+            unit = "mm" if key == "WITS" else "°"
+            text = f"{key}: {steiner_results[key]:.2f}{unit}"
+            c.drawString(70, y, text)
+            y -= 20
+
+    # Ricketts Aesthetic
+    y -= 10
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Ricketts Aesthetic")
+    y -= 30
+    c.setFont("Helvetica", 10)
+
+    for key in ["Ls_E", "Li_E"]:
+        if key in steiner_results and steiner_results[key] is not None:
+            text = f"{key}: {steiner_results[key]:.2f} mm"
+            c.drawString(70, y, text)
+            y -= 20
+
+    # Jarabak Analysis
+    y -= 10
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Jarabak Analysis")
+    y -= 30
+    c.setFont("Helvetica", 10)
+
+    for key in ["Silla", "Articular", "Goniaco", "Suma_Angulos"]:
+        if key in steiner_results and steiner_results[key] is not None:
+            text = f"{key}: {steiner_results[key]:.2f}°"
+            c.drawString(70, y, text)
+            y -= 20
+
+    for key in ["Base_Craneal_Ant", "Base_Craneal_Post", "Altura_Rama", "Cuerpo_Mandibular", "Altura_Facial_Ant"]:
+        if key in steiner_results and steiner_results[key] is not None:
+            text = f"{key}: {steiner_results[key]:.2f} mm"
+            c.drawString(70, y, text)
+            y -= 20
+
+    # Dental Inclination
+    y -= 10
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Dental Inclination")
+    y -= 30
+    c.setFont("Helvetica", 10)
+
+    for key in ["1Sup_SN", "1Inf_PM", "Interincisal"]:
+        if key in steiner_results and steiner_results[key] is not None:
+            text = f"{key}: {steiner_results[key]:.2f}°"
+            c.drawString(70, y, text)
+            y -= 20
+
     y -= 40
     c.setFont("Helvetica", 8)
     c.setFillColor(HexColor("#6B7280"))
