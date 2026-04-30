@@ -2,19 +2,17 @@
 // Categories: cranial (red), mandibular (blue), dental (green), soft-tissue (yellow)
 
 const LANDMARKS = [
-  // Cranial bones (red)
+  // Cranial bones (red) - ALL skeletal points of maxilla and cranial base
   { id: 0, name: 'Sella (S)', category: 'cranial', color: '#EF4444' },
   { id: 1, name: 'Nasion (N)', category: 'cranial', color: '#EF4444' },
   { id: 2, name: 'Articular (Ar)', category: 'cranial', color: '#EF4444' },
   { id: 3, name: 'Porion (Po)', category: 'cranial', color: '#EF4444' },
-  { id: 4, name: 'Posterior Nasal Spine', category: 'cranial', color: '#EF4444' },
-
-  // Maxilla (dental - green)
-  { id: 5, name: 'A-point', category: 'dental', color: '#22C55E' },
-  { id: 6, name: 'Anterior Nasal Spine (ANS)', category: 'dental', color: '#22C55E' },
+  { id: 4, name: 'Posterior Nasal Spine (PNS)', category: 'cranial', color: '#EF4444' },
+  { id: 5, name: 'A-point (Subspinale)', category: 'cranial', color: '#EF4444' },
+  { id: 6, name: 'Anterior Nasal Spine (ANS)', category: 'cranial', color: '#EF4444' },
 
   // Mandibular bones (blue)
-  { id: 7, name: 'B-point', category: 'mandibular', color: '#3B82F6' },
+  { id: 7, name: 'B-point (Supramental)', category: 'mandibular', color: '#3B82F6' },
   { id: 8, name: 'Menton (Me)', category: 'mandibular', color: '#3B82F6' },
   { id: 9, name: 'Gonion (Go)', category: 'mandibular', color: '#3B82F6' },
   { id: 10, name: 'Pogonion (Pog)', category: 'mandibular', color: '#3B82F6' },

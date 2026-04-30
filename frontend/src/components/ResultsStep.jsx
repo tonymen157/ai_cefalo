@@ -109,10 +109,8 @@ function ResultsStep() {
     if (!calibrationMmpp || !editableLandmarks.length) return
     setLoading(true)
     try {
-      // TRADUCCIÓN PARA PYTHON: Convertir de [{x, y}] a [[x, y]]
       const payloadLandmarks = editableLandmarks.map(lm => [lm.x, lm.y])
 
-      // Enviar el payload limpio
       const data = await post('/steiner-analysis', {
         landmarks: payloadLandmarks,
         calibration_mmpp: calibrationMmpp,
@@ -130,7 +128,7 @@ function ResultsStep() {
   }
 
   const handleResetLandmarks = async () => {
-    if (window.confirm("¿Seguro que deseas descartar los cambios y volver a los puntos originales de la IA?")) {
+    if (window.confirm("Seguro que deseas descartar los cambios y volver a los puntos originales de la IA?")) {
       const originalStr = sessionStorage.getItem('landmarks') || '[]'
       const original = JSON.parse(originalStr)
       const formatted = original.map((lm) => ({
@@ -138,10 +136,8 @@ function ResultsStep() {
         y: Array.isArray(lm) ? lm[1] : lm.y ?? lm[1] ?? 0,
       }))
 
-      // 1. Restaurar visualmente
       setEditableLandmarks(formatted)
 
-      // 2. Auto-recálculo de la tabla con los valores originales
       if (!calibrationMmpp) return
       setLoading(true)
       try {
@@ -185,6 +181,7 @@ function ResultsStep() {
               calibrationMmpp={calibrationMmpp}
               zoom={zoom}
               activeFilter={activeFilter}
+              analysisResults={analysisResults}
             />
           )}
         </div>
