@@ -81,44 +81,42 @@ function SteinerTable({ results }) {
             <div className="bg-blue-50/50 px-4 py-2.5 font-semibold text-sm text-blue-800 border-b border-gray-200">
               {category.title}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th className="px-4 py-2.5 font-medium">Medida</th>
-                    <th className="px-4 py-2.5 font-medium">Norma</th>
-                    <th className="px-4 py-2.5 font-medium">Paciente</th>
-                    <th className="px-4 py-2.5 font-medium">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {category.measurements.map((item) => {
-                    // 1. Búsqueda Recursiva: Busca en toda la respuesta de Python
-                    const rawVal = findDynamicValue(results, item.id);
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium w-1/4">Medida</th>
+                  <th className="px-4 py-2.5 font-medium w-1/4">Norma</th>
+                  <th className="px-4 py-2.5 font-medium w-1/4">Paciente</th>
+                  <th className="px-4 py-2.5 font-medium w-1/4">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {category.measurements.map((item) => {
+                  // 1. Búsqueda Recursiva: Busca en toda la respuesta de Python
+                  const rawVal = findDynamicValue(results, item.id);
 
-                    // 2. Parseo de seguridad estricto
-                    const patientVal = rawVal !== null && rawVal !== undefined && rawVal !== ''
-                      ? parseFloat(rawVal)
-                      : null;
+                  // 2. Parseo de seguridad estricto
+                  const patientVal = rawVal !== null && rawVal !== undefined && rawVal !== ''
+                    ? parseFloat(rawVal)
+                    : null;
 
-                    const status = getInterpretation(patientVal, item);
+                  const status = getInterpretation(patientVal, item);
 
-                    return (
-                      <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2 font-medium text-gray-800">{item.id}</td>
-                        <td className="px-4 py-2 text-gray-500">{item.normal}{item.unit} (±{item.sd})</td>
-                        <td className="px-4 py-2 font-bold text-gray-900">
-                          {patientVal !== null && !isNaN(patientVal) ? `${patientVal.toFixed(2)}${item.unit}` : '-'}
-                        </td>
-                        <td className={`px-4 py-2 text-xs font-semibold ${status.color}`}>
-                          <span className="px-2 py-1 rounded-full">{status.text}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-2 font-medium text-gray-800 truncate">{item.id}</td>
+                      <td className="px-4 py-2 text-gray-500 truncate">{item.normal}{item.unit} (±{item.sd})</td>
+                      <td className="px-4 py-2 font-bold text-gray-900 truncate">
+                        {patientVal !== null && !isNaN(patientVal) ? `${patientVal.toFixed(2)}${item.unit}` : '-'}
+                      </td>
+                      <td className={`px-4 py-2 text-xs font-semibold ${status.color} truncate`}>
+                        <span className="px-2 py-1 rounded-full">{status.text}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ))}
     </div>

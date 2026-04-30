@@ -7,24 +7,25 @@ class CephalometricAnalysis:
         self.nombre_imagen = nombre_imagen
         self.escala_mm = escala_mm  # mm por píxel
 
-        # Índices de landmarks críticos
-        self.IDX_A_POINT = 0
-        self.IDX_B_POINT = 2
-        self.IDX_ARTICULARE = 3
-        self.IDX_NASION = 4
-        self.IDX_INCISOR_SUP = 5
-        self.IDX_INCISOR_INF = 8
-        self.IDX_GONION = 9
-        self.IDX_SELLA = 10
-        self.IDX_MOLAR_INF = 11
-        self.IDX_MOLAR_SUP = 12
-        self.IDX_PORION = 13
-        self.IDX_GNATHION = 14
-        self.IDX_UPPER_LIP = 17
-        self.IDX_LOWER_LIP = 18
-        self.IDX_SOFT_POGONION = 20
-        self.IDX_NOSE_TIP = 21
-        self.IDX_MENTON = 24
+        # Índices de landmarks (alineados con src/core/landmarks.py)
+        self.IDX_A_POINT = 0          # A (Subespinale)
+        self.IDX_B_POINT = 2          # B (Supramental)
+        self.IDX_ARTICULARE = 11      # Ar (Articulación)
+        self.IDX_NASION = 4           # N (Nasion)
+        self.IDX_INCISOR_SUP = 21     # UIT (Upper Incisor Tip)
+        self.IDX_INCISOR_INF = 17     # LIT (Lower Incisor Tip)
+        self.IDX_INCISOR_INF_APEX = 23 # LIA (Lower Incisor Apex)
+        self.IDX_GONION = 14          # Go (Gonion)
+        self.IDX_SELLA = 10           # S (Sella)
+        self.IDX_MOLAR_INF = 18       # LMT (Lower Molar Tip)
+        self.IDX_MOLAR_SUP = 19       # UPM (Upper Molar Tip)
+        self.IDX_PORION = 15          # Po (Porion)
+        self.IDX_GNATHION = 13        # Gn (Gnathion)
+        self.IDX_UPPER_LIP = 25       # Ls (Upper Lip)
+        self.IDX_LOWER_LIP = 24       # Li (Lower Lip)
+        self.IDX_SOFT_POGONION = 27   # Pog' (Soft Pogonion)
+        self.IDX_NOSE_TIP = 28        # Sn (Subnasale/Nose Tip)
+        self.IDX_MENTON = 3           # Me (Menton)
 
     def get_point(self, idx):
         return self.coords[idx]
@@ -67,7 +68,7 @@ class CephalometricAnalysis:
         A = np.array(self.get_point(self.IDX_A_POINT))
         B = np.array(self.get_point(self.IDX_B_POINT))
 
-        # Plano Oclusal (Proxy): Punto medio molares a punto medio incisivos
+        # Plano Oclusal: Punto medio molares a punto medio incisivos
         molar_mid = (np.array(self.get_point(self.IDX_MOLAR_SUP)) + np.array(self.get_point(self.IDX_MOLAR_INF))) / 2.0
         incisor_mid = (np.array(self.get_point(self.IDX_INCISOR_SUP)) + np.array(self.get_point(self.IDX_INCISOR_INF))) / 2.0
 
@@ -88,24 +89,26 @@ class CephalometricAnalysis:
     def ricketts_estetico(self):
         if not self.escala_mm:
             return {"Ls_E": None, "Li_E": None}
+        # Pn = Nose Tip (Sn, 28), Pos = Soft Pogonion (Pog', 27)
         Pn = np.array(self.get_point(self.IDX_NOSE_TIP))
         Pos = np.array(self.get_point(self.IDX_SOFT_POGONION))
         Ls = np.array(self.get_point(self.IDX_UPPER_LIP))
         Li = np.array(self.get_point(self.IDX_LOWER_LIP))
 
-        # Determinar si la cara mira a la derecha o izquierda dinámicamente
+        # Paciente mira a la derecha (X aumenta hacia la cara)
         is_right_facing = Pn[0] > self.get_point(self.IDX_PORION)[0]
 
         def dist_to_eline(point):
-            # Calcular X sobre la recta en el mismo Y del labio
             if Pos[1] != Pn[1]:
                 x_line = Pn[0] + (Pos[0] - Pn[0]) * (point[1] - Pn[1]) / (Pos[1] - Pn[1])
-                # Signo basado en la orientación del paciente
-                sign = 1 if (point[0] > x_line and is_right_facing) or (point[0] < x_line and not is_right_facing) else -1
+                # Signo: positivo si detrás de la línea, negativo si por delante (protrusión)
+                if is_right_facing:
+                    sign = -1 if point[0] > x_line else 1
+                else:
+                    sign = 1 if point[0] > x_line else -1
             else:
                 sign = 1
 
-            # Distancia perpendicular pura
             num = abs((Pos[0]-Pn[0])*(Pn[1]-point[1]) - (Pn[0]-point[0])*(Pos[1]-Pn[1]))
             den = np.linalg.norm(Pos - Pn)
             if den == 0:
@@ -121,13 +124,19 @@ class CephalometricAnalysis:
         Go = self.get_point(self.IDX_GONION)
         Me = self.get_point(self.IDX_MENTON)
 
+        # Ángulos internos del polígono (120-150°)
         ang_silla = self.calculate_angle(N, S, Ar)
         ang_articular = self.calculate_angle(S, Ar, Go)
         ang_goniaco = self.calculate_angle(Ar, Go, Me)
 
+        # Corregir si el cálculo devolvió el ángulo externo
+        ang_silla = ang_silla if ang_silla > 90 else 180 - ang_silla
+        ang_articular = ang_articular if ang_articular > 90 else 180 - ang_articular
+        ang_goniaco = ang_goniaco if ang_goniaco > 90 else 180 - ang_goniaco
+
         return {
             "Base_Craneal_Ant": self.dist_mm(N, S),
-            "Base_Craneal_Post": self.dist_mm(S, Ar),
+            "Base_Craneal_Post": self.dist_mm(S, Ar),  # Ahora usa Ar (11) en lugar de Me (3)
             "Altura_Rama": self.dist_mm(Ar, Go),
             "Cuerpo_Mandibular": self.dist_mm(Go, Me),
             "Altura_Facial_Ant": self.dist_mm(N, Me),
@@ -140,18 +149,24 @@ class CephalometricAnalysis:
     def dental_inclination(self):
         A = self.get_point(self.IDX_A_POINT)
         B = self.get_point(self.IDX_B_POINT)
-        U1 = self.get_point(self.IDX_INCISOR_SUP)
-        L1 = self.get_point(self.IDX_INCISOR_INF)
+        U1 = self.get_point(self.IDX_INCISOR_SUP)       # Upper Incisor Tip (21)
+        L1 = self.get_point(self.IDX_INCISOR_INF)       # Lower Incisor Tip (17)
+        L1_apex = self.get_point(self.IDX_INCISOR_INF_APEX) # Lower Incisor Apex (23)
         S = self.get_point(self.IDX_SELLA)
         N = self.get_point(self.IDX_NASION)
         Go = self.get_point(self.IDX_GONION)
         Gn = self.get_point(self.IDX_GNATHION)
 
-        # Ángulos suplementarios dinámicos
+        # Ángulo 1Sup-SN (suplementario dinámico)
         ang_1Sup_SN = 180 - self.angle_between_lines(S, N, A, U1)
-        ang_IMPA = self.angle_between_lines(Go, Gn, B, L1)
+
+        # 1Inf-PM: Ángulo entre eje incisivo inferior y plano mandibular (Go-Gn)
+        # Eje incisivo: Apex (LIA, 23) → Tip (LIT, 17)
+        ang_IMPA = self.angle_between_lines(Go, Gn, L1_apex, L1)
         if ang_IMPA > 90:
             ang_IMPA = 180 - ang_IMPA
+
+        # Interincisal angle
         ang_inter = self.angle_between_lines(A, U1, B, L1)
         if ang_inter < 90:
             ang_inter = 180 - ang_inter
@@ -163,18 +178,15 @@ class CephalometricAnalysis:
         }
 
     def reporte_json(self):
-        # Ejecutar matemáticas
         wits = self.wits_analysis()
         ricketts = self.ricketts_estetico()
         jarabak = self.jarabak_analysis()
         dental = self.dental_inclination()
 
-        # Diccionario maestro para el Radar Recursivo de React
         def safe_round(val, decimals=2):
             if val is None:
                 return None
             try:
-                # Manejar numpy floats y Python floats (nan, inf)
                 float_val = float(val)
                 if math.isnan(float_val) or math.isinf(float_val):
                     return None

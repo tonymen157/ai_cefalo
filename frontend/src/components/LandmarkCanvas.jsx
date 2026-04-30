@@ -106,10 +106,46 @@ function LandmarkCanvas({
             drawLine(4, 2, '#22C55E')   // N-B (Verde)
             drawLine(14, 13, '#F59E0B') // Go-Gn Plano Mandibular (Naranja)
           }
-          // Otras opciones preparadas para cuando conectemos Python
-          // if (activeFilter === 'wits') { ... }
-          // if (activeFilter === 'ricketts') { ... }
-          // if (activeFilter === 'jarabak') { ... }
+
+          if (activeFilter === 'ricketts') {
+            // Línea E de Ricketts: Sn(28, Nose Tip) → Pog'(27, Soft Pogonion)
+            drawLine(28, 27, '#8B5CF6') // Morado
+          }
+
+          if (activeFilter === 'occlusal') {
+            // Plano Oclusal: punto medio molares → punto medio incisivos
+            const molarMid = {
+              x: (landmarks[18].x + landmarks[19].x) / 2,
+              y: (landmarks[18].y + landmarks[19].y) / 2
+            }
+            const incisorMid = {
+              x: (landmarks[21].x + landmarks[17].x) / 2,
+              y: (landmarks[21].y + landmarks[17].y) / 2
+            }
+            if (molarMid && incisorMid) {
+              ctx.beginPath()
+              ctx.strokeStyle = '#EC4899' // Rosa
+              ctx.lineWidth = dynamicLineWidth
+              ctx.moveTo(molarMid.x, molarMid.y)
+              ctx.lineTo(incisorMid.x, incisorMid.y)
+              ctx.stroke()
+            }
+          }
+
+          if (activeFilter === 'jarabak') {
+            // Polígono de Jarabak: N(4)-S(10)-Ar(11)-Go(14)-Me(3)-N(4)
+            const jarabakPoints = [4, 10, 11, 14, 3, 4]
+            ctx.beginPath()
+            ctx.strokeStyle = '#10B981' // Verde
+            ctx.lineWidth = dynamicLineWidth
+            jarabakPoints.forEach((idx, i) => {
+              const p = landmarks[idx]
+              if (!p || p.x == null) return
+              if (i === 0) ctx.moveTo(p.x, p.y)
+              else ctx.lineTo(p.x, p.y)
+            })
+            ctx.stroke()
+          }
         }
 
         // Dibujar Puntos
