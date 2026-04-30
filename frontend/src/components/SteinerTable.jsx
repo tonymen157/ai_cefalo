@@ -4,8 +4,23 @@ import { CEPHALOMETRIC_NORMS } from '../constants/analysisNorms';
 function SteinerTable({ results }) {
   const [activeCategory, setActiveCategory] = useState('todas');
 
-  const getInterpretation = (val, item) => {
+  const getInterpretation = (val, item, results) => {
     if (val == null || isNaN(val)) return { text: '-', color: 'text-gray-400' };
+
+    // Prioridad: usar interpretacion del backend si existe (ej: Silla_interp, Cuerpo_Mandibular_interp)
+    const interpKey = item.id + '_interp';
+    if (results && results[interpKey] && results[interpKey] !== 'None') {
+      const backendText = results[interpKey];
+      // Determinar color basado en si sugiere Clase II o III
+      if (backendText.includes('Clase III')) {
+        return { text: backendText, color: 'text-orange-600 bg-orange-50' };
+      } else if (backendText.includes('Clase II')) {
+        return { text: backendText, color: 'text-red-600 bg-red-50' };
+      }
+      return { text: backendText, color: 'text-green-700 bg-green-50' };
+    }
+
+    // Lógica local de respaldo
     if (val > item.normal + item.sd) return { text: `↑ ${item.high}`, color: 'text-red-600 bg-red-50' };
     if (val < item.normal - item.sd) return { text: `↓ ${item.low}`, color: 'text-orange-600 bg-orange-50' };
 
@@ -13,6 +28,7 @@ function SteinerTable({ results }) {
     return { text: textToDisplay, color: 'text-green-700 bg-green-50' };
   };
 
+  // Buscador inteligente (Búsqueda Recursiva)
   const findDynamicValue = (apiData, targetId) => {
     if (!apiData || typeof apiData !== 'object') return null;
     const lowerTarget = targetId.toLowerCase();
@@ -41,10 +57,28 @@ function SteinerTable({ results }) {
     return search(apiData);
   };
 
+  // Determinar color de la clase esqueletal
+  const getClaseColor = (clase) => {
+    if (clase === 'Clase III') return 'bg-orange-100 text-orange-800 border-orange-300';
+    if (clase === 'Clase II') return 'bg-red-100 text-red-800 border-red-300';
+    return 'bg-green-100 text-green-800 border-green-300';
+  };
+
+  const claseEsqueletal = results?.clase_esqueletal;
+
   return (
     <div className="mt-6 space-y-4">
+      {/* BANNER DE CLASE ESQUELETAL */}
+      {claseEsqueletal && (
+        <div className={`text-center py-2 px-4 rounded-lg border font-bold text-sm ${getClaseColor(claseEsqueletal)}`}>
+          Diagnostico Esqueletal: {claseEsqueletal}
+          {results?.ANB != null && ` (ANB: ${parseFloat(results.ANB).toFixed(1)}°, Wits: ${results.WITS != null ? parseFloat(results.WITS).toFixed(1) + 'mm' : 'N/A'})`}
+        </div>
+      )}
+
+      {/* CABECERA CON EL MENU DESPLEGABLE */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-200 pb-3 gap-3">
-        <h3 className="text-lg font-bold text-gray-800">Resultados Clínicos</h3>
+        <h3 className="text-lg font-bold text-gray-800">Resultados Clinicos</h3>
         <div className="flex items-center space-x-2">
           <label htmlFor="category-filter" className="text-sm font-semibold text-gray-600 whitespace-nowrap">
             Filtro:
@@ -57,14 +91,15 @@ function SteinerTable({ results }) {
           >
             <option value="todas">Mostrar Todo</option>
             <option value="esqueletal">Esqueletal (Steiner/Wits)</option>
-            <option value="dental">Inclinación Dental</option>
-            <option value="estetico">Estético (Ricketts)</option>
+            <option value="dental">Inclinacion Dental</option>
+            <option value="estetico">Estetico (Ricketts)</option>
             <option value="jarabak_lineal">Lineales (Jarabak)</option>
             <option value="jarabak_angular">Angulares (Jarabak)</option>
           </select>
         </div>
       </div>
 
+      {/* RENDERIZADO DINAMICO DE LAS TABLAS */}
       {Object.entries(CEPHALOMETRIC_NORMS)
         .filter(([key]) => activeCategory === 'todas' || activeCategory === key)
         .map(([key, category]) => (
@@ -88,7 +123,7 @@ function SteinerTable({ results }) {
                     ? parseFloat(rawVal)
                     : null;
 
-                  const status = getInterpretation(patientVal, item);
+                  const status = getInterpretation(patientVal, item, results);
 
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">

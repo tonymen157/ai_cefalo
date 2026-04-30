@@ -177,11 +177,62 @@ class CephalometricAnalysis:
             "Interincisal": ang_inter
         }
 
+    def _clase_esqueletal(self, anb, wits):
+        """Determina la clase esqueletal priorizando ANB y Wits."""
+        if anb is None:
+            return None
+        if anb > 4 or (wits is not None and wits > 2):
+            return "Clase II"
+        if anb < 0 or (wits is not None and wits < -2):
+            return "Clase III"
+        return "Clase I"
+
+    def _interpretar_jarabak(self, jarabak, clase):
+        """Ajusta las etiquetas de Jarabak según la clase esqueletal dominante."""
+        resultado = dict(jarabak)
+
+        # Cuerpo Mandibular: si es grande y la clase es III, decir Clase III; si es grande y clase II, decir Clase II
+        if jarabak["Cuerpo_Mandibular"] is not None and clase:
+            if jarabak["Cuerpo_Mandibular"] > 76:  # Por encima de norma+sd
+                if clase == "Clase III":
+                    resultado["Cuerpo_Mandibular_clase"] = "Clase III (mandíbula grande)"
+                elif clase == "Clase II":
+                    resultado["Cuerpo_Mandibular_clase"] = "Clase II (maxilar pequeño relativo)"
+                else:
+                    resultado["Cuerpo_Mandibular_clase"] = "Cuerpo mandibular aumentado"
+            elif jarabak["Cuerpo_Mandibular"] < 66:  # Por debajo de norma-sd
+                if clase == "Clase III":
+                    resultado["Cuerpo_Mandibular_clase"] = "Clase III (mandíbula pequeña relativa)"
+                elif clase == "Clase II":
+                    resultado["Cuerpo_Mandibular_clase"] = "Clase II (maxilar grande)"
+                else:
+                    resultado["Cuerpo_Mandibular_clase"] = "Cuerpo mandibular disminuido"
+            else:
+                resultado["Cuerpo_Mandibular_clase"] = "Cuerpo mandibular normal"
+
+        # Silla: ángulo aumentado (>128) sugiere crecimiento plano → tendencia Clase III
+        if jarabak["Silla"] is not None:
+            if jarabak["Silla"] > 128 and clase == "Clase III":
+                resultado["Silla_clase"] = "Silla abierta → tendencia Clase III"
+            elif jarabak["Silla"] < 118 and clase == "Clase II":
+                resultado["Silla_clase"] = "Silla cerrada → tendencia Clase II"
+            else:
+                resultado["Silla_clase"] = f"Silla {jarabak['Silla']:.1f}°"
+
+        return resultado
+
     def reporte_json(self):
+        sna = self.angulo_sna()
+        snb = self.angulo_snb()
+        anb = sna - snb
         wits = self.wits_analysis()
         ricketts = self.ricketts_estetico()
         jarabak = self.jarabak_analysis()
         dental = self.dental_inclination()
+
+        # Diagnóstico de clase dominante (prioridad ANB/Wits)
+        clase = self._clase_esqueletal(anb, wits)
+        jarabak_interp = self._interpretar_jarabak(jarabak, clase)
 
         def safe_round(val, decimals=2):
             if val is None:
@@ -195,9 +246,9 @@ class CephalometricAnalysis:
                 return None
 
         result = {
-            "SNA": safe_round(self.angulo_sna()),
-            "SNB": safe_round(self.angulo_snb()),
-            "ANB": safe_round(self.angulo_sna() - self.angulo_snb()),
+            "SNA": safe_round(sna),
+            "SNB": safe_round(snb),
+            "ANB": safe_round(anb),
             "WITS": safe_round(wits),
             "Ls_E": safe_round(ricketts["Ls_E"]),
             "Li_E": safe_round(ricketts["Li_E"]),
@@ -212,6 +263,10 @@ class CephalometricAnalysis:
             "Suma_Angulos": safe_round(jarabak["Suma_Angulos"]),
             "1Sup_SN": safe_round(dental["1Sup_SN"]),
             "1Inf_PM": safe_round(dental["1Inf_PM"]),
-            "Interincisal": safe_round(dental["Interincisal"])
+            "Interincisal": safe_round(dental["Interincisal"]),
+            # Campo de diagnóstico coherente
+            "clase_esqueletal": clase,
+            "Silla_interp": jarabak_interp.get("Silla_clase"),
+            "Cuerpo_Mandibular_interp": jarabak_interp.get("Cuerpo_Mandibular_clase")
         }
         return result
