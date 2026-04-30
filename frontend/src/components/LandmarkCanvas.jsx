@@ -64,31 +64,40 @@ function LandmarkCanvas({
     return () => { img.onload = null; img.onerror = null }
   }, [imageId, imageUrl])
 
-  // 2) Dibujar
+  // 2) Dibujar - responsive y con soporte de zoom dinámico
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !imgLoaded || !imgRef.current) return
 
     const dpr = window.devicePixelRatio || 1
+    const scale = zoom / 100
 
-    // Configuración CRÍTICA para nitidez:
-    // El buffer interno es imgSize * dpr
-    canvas.width = Math.round(imgSize.w * dpr)
-    canvas.height = Math.round(imgSize.h * dpr)
-    // El CSS debe coincidir EXACTAMENTE con el tamaño lógico (imgSize)
-    canvas.style.width = `${imgSize.w}px`
-    canvas.style.height = `${imgSize.h}px`
+    // Tamaño lógico (coordenadas base de la imagen)
+    const logicalW = imgSize.w
+    const logicalH = imgSize.h
+
+    // Tamaño visual CSS (lo que el usuario ve, afectado por zoom)
+    const visualW = logicalW * scale
+    const visualH = logicalH * scale
+
+    // Buffer interno: tamaño visual * dpr para nitidez
+    canvas.width = Math.round(visualW * dpr)
+    canvas.height = Math.round(visualH * dpr)
+
+    // Tamaño visual via CSS - dinámico según zoom
+    canvas.style.width = `${visualW}px`
+    canvas.style.height = `${visualH}px`
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     try {
       ctx.save()
-      // Escalar: todo lo que dibujemos usa coordenadas lógicas (imgSize)
-      ctx.scale(dpr, dpr)
+      // Escalar: lógico -> físico (dpr * scale)
+      ctx.scale(dpr * scale, dpr * scale)
 
-      // Dibujar imagen desde cache
-      ctx.drawImage(imgRef.current, 0, 0, imgSize.w, imgSize.h)
+      // Dibujar imagen en coordenadas lógicas
+      ctx.drawImage(imgRef.current, 0, 0, logicalW, logicalH)
 
       const valid = (p) => p && p.x != null && !isNaN(p.x) && !isNaN(p.y)
 
@@ -97,14 +106,14 @@ function LandmarkCanvas({
         ctx.beginPath()
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
         ctx.lineWidth = Math.max(1, radius * 0.1)
-        const step = imgSize.w / 40
-        for (let x = 0; x <= imgSize.w; x += step) {
+        const step = logicalW / 40
+        for (let x = 0; x <= logicalW; x += step) {
           ctx.moveTo(x, 0)
-          ctx.lineTo(x, imgSize.h)
+          ctx.lineTo(x, logicalH)
         }
-        for (let y = 0; y <= imgSize.h; y += step) {
+        for (let y = 0; y <= logicalH; y += step) {
           ctx.moveTo(0, y)
-          ctx.lineTo(imgSize.w, y)
+          ctx.lineTo(logicalW, y)
         }
         ctx.stroke()
       }
@@ -127,7 +136,7 @@ function LandmarkCanvas({
           ctx.stroke()
         }
 
-        // ETIOUETAS SIN RECUADRO - usa strokeText para contorno
+        // ETIQUETAS SIN RECUADRO - usa strokeText para contorno
         const drawLabel = (text, x, y, color, offsetX = 6, offsetY = -6) => {
           if (!text && text !== 0) return
           if (!showLabels) return
@@ -136,10 +145,6 @@ function LandmarkCanvas({
           const fontSize = labelFontSize
           ctx.font = `bold ${fontSize}px sans-serif`
           ctx.textBaseline = 'top'
-
-          const metrics = ctx.measureText(text)
-          const textW = metrics.width
-          const textH = fontSize
 
           const lx = x + offsetX
           const ly = y + offsetY
@@ -173,17 +178,14 @@ function LandmarkCanvas({
           const bPt = landmarks[2]   // B-point
 
           if (valid(nPt) && valid(sPt)) {
-            // SNA: cerca de Nasion, arriba
             drawLabel(`${res.SNA?.toFixed(1) ?? '--'}°`,
               nPt.x - 15, nPt.y - fontSize - 4, '#EF4444', -10, -4)
           }
           if (valid(nPt) && valid(sPt)) {
-            // SNB: cerca de Sella, abajo a la derecha
             drawLabel(`${res.SNB?.toFixed(1) ?? '--'}°`,
               sPt.x + 8, sPt.y + 4, '#3B82F6', 8, 4)
           }
           if (valid(aPt) && valid(bPt) && valid(nPt)) {
-            // ANB: entre A y B, cerca de Nasion
             const anbText = res.ANB != null ? `ANB: ${res.ANB.toFixed(1)}°` : 'ANB: --°'
             drawLabel(anbText,
               Math.min(aPt.x, bPt.x) + 5, nPt.y - fontSize - 2, '#8B5CF6', 5, -2)
@@ -300,39 +302,34 @@ function LandmarkCanvas({
         ctx.shadowBlur = 0
       }
 
-      // Puntos (colores ESTRICTOS por categoría)
+      // Puntos (colores ESTRICTOS por categoría) - ctx.scale ya escala todo automáticamente
       if (showPoints) {
-        const rect = canvas.getBoundingClientRect()
-        const stretchRatio = rect.width ? (rect.width / imgSize.w) : 1
-        const dynRadius = radius ?? (4 / stretchRatio)
         landmarks.forEach((lm, idx) => {
           if (!lm || lm.x == null || isNaN(lm.x) || isNaN(lm.y)) return
           const info = LANDMARKS[idx]
           if (!info) return
           ctx.beginPath()
-          ctx.arc(lm.x, lm.y, idx === selectedLandmark ? dynRadius * 1.5 : dynRadius, 0, Math.PI * 2)
+          ctx.arc(lm.x, lm.y, idx === selectedLandmark ? radius * 1.5 : radius, 0, Math.PI * 2)
           ctx.fillStyle = idx === selectedLandmark ? '#FFD700' : info.color
           ctx.fill()
           ctx.strokeStyle = '#FFFFFF'
-          ctx.lineWidth = 1.5 / stretchRatio
+          ctx.lineWidth = 1.5
           ctx.stroke()
         })
       }
 
-      // Tooltip
+      // Tooltip - usa coordenadas lógicas (x, y) porque ctx.scale escala automáticamente
       if (hoverIdx !== null && tooltip.show) {
         const info = LANDMARKS[hoverIdx]
         if (info) {
-          const rect = canvas.getBoundingClientRect()
-          const stretchRatio = rect.width ? (rect.width / imgSize.w) : 1
-          const fontSize = 14 / stretchRatio
+          const fontSize = 14
           ctx.font = `${fontSize}px sans-serif`
           const text = `${info.id}: ${info.name}`
           const metrics = ctx.measureText(text)
-          const padX = 12 / stretchRatio
-          const boxH = 24 / stretchRatio
-          const offX = 10 / stretchRatio
-          const offY = 30 / stretchRatio
+          const padX = 12
+          const boxH = 24
+          const offX = 10
+          const offY = 30
           ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
           ctx.fillRect(tooltip.x + offX, tooltip.y - offY, metrics.width + padX, boxH)
           ctx.fillStyle = '#FFFFFF'
@@ -365,15 +362,21 @@ function LandmarkCanvas({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedLandmark, calibrationMmPp, onSelectLandmark])
 
-  // Mouse move
-  const handleMouseMove = (e) => {
+  // Mouse move - coordenadas dinámicas y precisas
+  const handleMouseMove = useCallback((e) => {
     const canvas = canvasRef.current
     if (!canvas || !imgSize.w) return
     const rect = canvas.getBoundingClientRect()
-    const scaleX = imgSize.w / rect.width
-    const scaleY = imgSize.h / rect.height
-    const x = (e.clientX - rect.left) * scaleX
-    const y = (e.clientY - rect.top) * scaleY
+    const scale = zoom / 100
+
+    // Coordenadas visuales (píxeles CSS del canvas tal como se ve)
+    const visX = e.clientX - rect.left
+    const visY = e.clientY - rect.top
+
+    // Convertir a coordenadas lógicas (espacio imgSize) dividiendo por el zoom
+    const x = visX / scale
+    const y = visY / scale
+
     let found = null
     landmarks.forEach((lm, idx) => {
       if (!lm || lm.x == null || isNaN(lm.x)) return
@@ -388,7 +391,7 @@ function LandmarkCanvas({
       setTooltip({ show: false, x: 0, y: 0, text: '' })
       canvas.style.cursor = 'crosshair'
     }
-  }
+  }, [imgSize, landmarks, radius, zoom])
 
   const handleClick = () => {
     if (hoverIdx !== null) {
@@ -412,7 +415,7 @@ function LandmarkCanvas({
           ref={canvasRef}
           onMouseMove={handleMouseMove}
           onClick={handleClick}
-          className="block"
+          className="w-full h-auto block"
         />
       </div>
     </div>
