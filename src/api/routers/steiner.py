@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from src.api.database import get_db
 from src.api.models import Job
 from src.analysis.geometry import CephalometricAnalysis
+from pydantic import BaseModel
+from typing import List, Optional
 import numpy as np
 import json
 from fastapi.responses import FileResponse
@@ -15,9 +17,13 @@ from pathlib import Path
 
 router = APIRouter()
 
+class SteinerRequest(BaseModel):
+    landmarks: list
+    calibration_mmpp: Optional[float] = None
+
 
 @router.post("/steiner-analysis")
-def steiner_analysis(data: dict):
+def steiner_analysis(data: SteinerRequest):
     """Calculate cephalometric analysis from landmarks using CephalometricAnalysis.
 
     Body parameters:
