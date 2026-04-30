@@ -1,91 +1,128 @@
-import { getAngleColor, getSkeletalClassification } from '../constants/steinerRanges'
+import React, { useState } from 'react';
+import { CEPHALOMETRIC_NORMS } from '../constants/analysisNorms';
 
 function SteinerTable({ results }) {
-  if (!results) return null
+  // Estado para el menú desplegable (por defecto muestra todo)
+  const [activeCategory, setActiveCategory] = useState('todas');
 
-  // Mapear formato correcto del backend:
-  // results.angulos = { SNA: 82.12, SNB: 80.45, ANB: 1.67 } (números planos)
-  // results.evaluacion = { SNA: {estado:"OK",lim_inf:80,lim_sup:84}, ... }
-  const angulosFormat = [
-    { nombre: 'SNA', valor: results.angulos?.SNA, estado: results.evaluacion?.SNA?.estado, lim_inf: results.evaluacion?.SNA?.lim_inf, lim_sup: results.evaluacion?.SNA?.lim_sup },
-    { nombre: 'SNB', valor: results.angulos?.SNB, estado: results.evaluacion?.SNB?.estado, lim_inf: results.evaluacion?.SNB?.lim_inf, lim_sup: results.evaluacion?.SNB?.lim_sup },
-    { nombre: 'ANB', valor: results.angulos?.ANB, estado: results.evaluacion?.ANB?.estado, lim_inf: results.evaluacion?.ANB?.lim_inf, lim_sup: results.evaluacion?.ANB?.lim_sup },
-  ]
+  const getInterpretation = (val, item) => {
+    if (val == null || isNaN(val)) return { text: '-', color: 'text-gray-400' };
+    if (val > item.normal + item.sd) return { text: `↑ ${item.high}`, color: 'text-red-600 bg-red-50' };
+    if (val < item.normal - item.sd) return { text: `↓ ${item.low}`, color: 'text-orange-600 bg-orange-50' };
 
-  const classification = results.clase_esqueletica
+    // Lógica dinámica para valores normales
+    const textToDisplay = item.normalText ? `✓ ${item.normalText}` : '✓ Normal';
+    return { text: textToDisplay, color: 'text-green-700 bg-green-50' };
+  };
 
-  const getEstadoTexto = (item) => {
-    if (item.estado === 'OK') return '✓ Normal'
-    // Lógica direccional clínico-ortodóntica
-    if (item.nombre === 'SNA') {
-      // SNA > 84 = maxilar protrusivo (↑ Aumentado)
-      // SNA < 80 = maxilar retrusivo (↓ Disminuido)
-      if (item.valor > item.lim_sup) return '↑ Aumentado'
-      if (item.valor < item.lim_inf) return '↓ Disminuido'
-    }
-    if (item.nombre === 'SNB') {
-      // SNB > 82 = mandibular protrusiva (↑ Aumentado)
-      // SNB < 78 = mandibular retrusiva (↓ Disminuido)
-      if (item.valor > item.lim_sup) return '↑ Aumentado'
-      if (item.valor < item.lim_inf) return '↓ Disminuido'
-    }
-    if (item.nombre === 'ANB') {
-      // ANB > 4 = Clase II (↑ Aumentado)
-      // ANB < 0 = Clase III (↓ Disminuido)
-      // 0.0 <= ANB <= 1.0: Límite inferior (tendencia a Clase III)
-      if (item.valor > item.lim_sup) return '↑ Aumentado'
-      if (item.valor < item.lim_inf) return '↓ Disminuido'
-      if (item.valor >= 0.0 && item.valor <= 1.0) return '↓ Límite inf. (Tendencia a Clase III)'
-    }
-    return '⚠️ Alterado'
-  }
+  // Buscador inteligente (Búsqueda Recursiva - reformulado para mayor seguridad)
+  const findDynamicValue = (apiData, targetId) => {
+    if (!apiData || typeof apiData !== 'object') return null;
+    const lowerTarget = targetId.toLowerCase();
 
-  const getColorClase = (item) => {
-    if (item.estado === 'OK') return 'bg-green-100 text-green-800'
-    if (item.estado === 'FUERA') return 'bg-orange-100 text-orange-800'
-    return 'bg-yellow-100 text-yellow-800'
-  }
+    const search = (data) => {
+      if (typeof data !== 'object' || data === null) return null;
 
-  const classificationColor = () => {
-    if (!classification) return 'bg-gray-100'
-    if (classification.includes('Clase I')) return 'bg-green-100 text-green-800'
-    if (classification.includes('Clase II')) return 'bg-red-100 text-red-800'
-    if (classification.includes('Clase III')) return 'bg-yellow-100 text-yellow-800'
-    return 'bg-gray-100'
-  }
+      // Si es un array, buscar en cada elemento
+      if (Array.isArray(data)) {
+        for (let item of data) {
+          const res = search(item);
+          if (res !== null) return res;
+        }
+        return null;
+      }
+
+      // Si es un objeto, revisar sus llaves (usando Object.entries para evitar propiedades de prototipo)
+      for (const [key, value] of Object.entries(data)) {
+        if (key.toLowerCase() === lowerTarget) return value;
+        // Si la llave actual es otro objeto/array, entrar más profundo (recursividad)
+        if (typeof value === 'object' && value !== null) {
+          const res = search(value);
+          if (res !== null) return res;
+        }
+      }
+      return null;
+    };
+
+    return search(apiData);
+  };
 
   return (
-    <div className="mb-6">
-      <h3 className="text-lg font-bold mb-3">Análisis de Steiner</h3>
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left">Ángulo</th>
-            <th className="border p-2 text-left">Valor</th>
-            <th className="border p-2 text-left">Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {angulosFormat.map((a) => (
-            <tr key={a.nombre}>
-              <td className="border p-2 font-medium">{a.nombre}</td>
-              <td className={`border p-2 font-bold ${a.valor !== undefined ? getColorClase(a) : ''}`}>
-                {a.valor !== undefined ? `${a.valor.toFixed(2)}°` : 'N/A'}
-              </td>
-              <td className={`border p-2 ${getColorClase(a)}`}>
-                {getEstadoTexto(a)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {classification && (
-        <div className={`mt-4 p-3 rounded-lg ${classificationColor()}`}>
-          <strong>Clasificación esquelética:</strong> {classification}
+    <div className="mt-6 space-y-4">
+      {/* CABECERA CON EL MENÚ DESPLEGABLE */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-200 pb-3 gap-3">
+        <h3 className="text-lg font-bold text-gray-800">Resultados Clínicos</h3>
+        <div className="flex items-center space-x-2">
+          <label htmlFor="category-filter" className="text-sm font-semibold text-gray-600 whitespace-nowrap">
+            Filtro:
+          </label>
+          <select
+            id="category-filter"
+            value={activeCategory}
+            onChange={(e) => setActiveCategory(e.target.value)}
+            className="bg-white border border-gray-300 text-gray-700 py-1.5 px-3 rounded-lg shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          >
+            <option value="todas">Mostrar Todo</option>
+            <option value="esqueletal">Esqueletal (Steiner/Wits)</option>
+            <option value="dental">Inclinación Dental</option>
+            <option value="estetico">Estético (Ricketts)</option>
+            <option value="jarabak_lineal">Lineales (Jarabak)</option>
+            <option value="jarabak_angular">Angulares (Jarabak)</option>
+          </select>
         </div>
-      )}
+      </div>
+
+      {/* RENDERIZADO DINÁMICO DE LAS TABLAS */}
+      {Object.entries(CEPHALOMETRIC_NORMS)
+        // El filtro mágico: muestra si es 'todas' o si coincide con la categoría elegida
+        .filter(([key]) => activeCategory === 'todas' || activeCategory === key)
+        .map(([key, category]) => (
+          <div key={key} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden transition-all duration-300">
+            <div className="bg-blue-50/50 px-4 py-2.5 font-semibold text-sm text-blue-800 border-b border-gray-200">
+              {category.title}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-gray-50 text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Medida</th>
+                    <th className="px-4 py-2.5 font-medium">Norma</th>
+                    <th className="px-4 py-2.5 font-medium">Paciente</th>
+                    <th className="px-4 py-2.5 font-medium">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {category.measurements.map((item) => {
+                    // 1. Búsqueda Recursiva: Busca en toda la respuesta de Python
+                    const rawVal = findDynamicValue(results, item.id);
+
+                    // 2. Parseo de seguridad estricto
+                    const patientVal = rawVal !== null && rawVal !== undefined && rawVal !== ''
+                      ? parseFloat(rawVal)
+                      : null;
+
+                    const status = getInterpretation(patientVal, item);
+
+                    return (
+                      <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-2 font-medium text-gray-800">{item.id}</td>
+                        <td className="px-4 py-2 text-gray-500">{item.normal}{item.unit} (±{item.sd})</td>
+                        <td className="px-4 py-2 font-bold text-gray-900">
+                          {patientVal !== null && !isNaN(patientVal) ? `${patientVal.toFixed(2)}${item.unit}` : '-'}
+                        </td>
+                        <td className={`px-4 py-2 text-xs font-semibold ${status.color}`}>
+                          <span className="px-2 py-1 rounded-full">{status.text}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
     </div>
-  )
+  );
 }
 
-export default SteinerTable
+export default SteinerTable;

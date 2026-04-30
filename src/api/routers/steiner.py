@@ -34,11 +34,11 @@ def steiner_analysis(data: SteinerRequest):
         dict with SNA, SNB, ANB, WITS, Ricketts, Jarabak, and dental inclination.
     """
     try:
-        landmarks = data.get("landmarks")
+        landmarks = data.landmarks
         if not landmarks:
             raise ValueError("landmarks required")
 
-        pixel_size = data.get("calibration_mmpp")
+        pixel_size = data.calibration_mmpp
 
         lm_array = np.array(landmarks, dtype=np.float32)
 

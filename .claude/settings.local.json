@@ -1,7 +1,7 @@
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
-    "ANTHROPIC_AUTH_TOKEN": "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",
+    "ANTHROPIC_AUTH_TOKEN": "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",
     "ANTHROPIC_API_KEY": "",
     "ANTHROPIC_MODEL": "tencent/hy3-preview:free"
   },
@@ -203,7 +203,10 @@
       "Bash(git push *)",
       "Bash(git lfs *)",
       "Bash(env)",
-      "Bash(huggingface-cli whoami *)"
+      "Bash(huggingface-cli whoami *)",
+      "Bash(vercel --version)",
+      "Bash(npm i *)",
+      "Read(//tmp/**)"
     ]
   }
 }
