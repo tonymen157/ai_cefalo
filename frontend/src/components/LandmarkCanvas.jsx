@@ -14,7 +14,7 @@ function LandmarkCanvas({
   onSelectLandmark,
   calibrationMmPp,
   zoom = 100,
-  activeFilter = 'steiner',
+  activeFilters = { steiner: true, wits: false, ricketts: false, jarabak: false },
   analysisResults = null,
   labelFontSize = 13,
 }) {
@@ -161,7 +161,7 @@ function LandmarkCanvas({
         const res = analysisResults || {}
 
         // --- STEINER ---
-        if (activeFilter === 'steiner') {
+        if (activeFilters?.steiner) {
           drawLine(10, 4, '#EF4444')   // S-N (Rojo)
           drawLine(4, 0, '#3B82F6')    // N-A (Azul)
           drawLine(4, 2, '#22C55E')    // N-B (Verde)
@@ -221,7 +221,7 @@ function LandmarkCanvas({
         }
 
         // --- WITS ---
-        if (activeFilter === 'wits') {
+        if (activeFilters?.wits) {
           const m1 = landmarks[18], m2 = landmarks[19]
           const i1 = landmarks[21], i2 = landmarks[17]
           if (valid(m1) && valid(m2) && valid(i1) && valid(i2)) {
@@ -286,7 +286,7 @@ function LandmarkCanvas({
         }
 
         // --- RICKETTS ---
-        if (activeFilter === 'ricketts') {
+        if (activeFilters?.ricketts) {
           drawLine(28, 27, '#8B5CF6') // Sn -> Pog' (Morado)
 
           // Linea E: cerca del punto medio entre Sn y Pog'
@@ -318,7 +318,7 @@ function LandmarkCanvas({
         }
 
         // --- JARABAK ---
-        if (activeFilter === 'jarabak') {
+        if (activeFilters?.jarabak) {
           const pts = [4, 10, 11, 14, 3, 4]
           ctx.beginPath()
           ctx.strokeStyle = '#10B981'
@@ -415,7 +415,7 @@ function LandmarkCanvas({
     } catch (e) {
       console.error('Error dibujando canvas:', e)
     }
-  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, showLabels, pointRadius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilter, analysisResults, labelFontSize])
+  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, showLabels, pointRadius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilters, analysisResults, labelFontSize])
 
   // Teclado
   useEffect(() => {

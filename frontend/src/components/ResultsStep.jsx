@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
 import SteinerTable from './SteinerTable'
@@ -12,7 +12,7 @@ function ResultsStep() {
   const navigate = useNavigate()
   const { post } = useApi()
 
-  // Estados de visualización
+  // Estados de visualización - CAMBIO a objeto para múltiples trazados
   const [showPoints, setShowPoints] = useState(true)
   const [showLines, setShowLines] = useState(true)
   const [showGrid, setShowGrid] = useState(false)
@@ -21,8 +21,15 @@ function ResultsStep() {
   const [selectedLandmark, setSelectedLandmark] = useState(null)
   const [imageSize, setImageSize] = useState({ w: 0, h: 0 })
   const [zoom, setZoom] = useState(100)
-  const [activeFilter, setActiveFilter] = useState('steiner')
   const [labelFontSize, setLabelFontSize] = useState(13)
+
+  // Estado para múltiples trazados (checkboxes)
+  const [activeFilters, setActiveFilters] = useState({
+    steiner: true,
+    wits: false,
+    ricketts: false,
+    jarabak: false,
+  })
 
   // Landmarks editables (copia local)
   const [editableLandmarks, setEditableLandmarks] = useState([])
@@ -123,7 +130,14 @@ function ResultsStep() {
     }
   }
 
+  // Capturar imagen del canvas y navegar a descarga
   const handleDownload = () => {
+    // Capturar el canvas usando toDataURL
+    const canvas = document.querySelector('canvas')
+    if (canvas) {
+      const dataUrl = canvas.toDataURL('image/png', 1.0)
+      sessionStorage.setItem('captured_image', dataUrl)
+    }
     navigate('/download')
   }
 
@@ -137,7 +151,7 @@ function ResultsStep() {
       }))
 
       setEditableLandmarks(formatted)
-      setSelectedLandmark(null) // ← Limpiar selección
+      setSelectedLandmark(null)
 
       if (!calibrationMmpp) return
       setLoading(true)
@@ -182,7 +196,7 @@ function ResultsStep() {
               onSelectLandmark={handleSelectLandmark}
               calibrationMmpp={calibrationMmpp}
               zoom={zoom}
-              activeFilter={activeFilter}
+              activeFilters={activeFilters}
               analysisResults={analysisResults}
               labelFontSize={labelFontSize}
             />
@@ -212,8 +226,8 @@ function ResultsStep() {
             zoom={zoom}
             setZoom={setZoom}
             onReset={handleResetLandmarks}
-            activeFilter={activeFilter}
-            setActiveFilter={setActiveFilter}
+            activeFilters={activeFilters}
+            setActiveFilters={setActiveFilters}
             labelFontSize={labelFontSize}
             setLabelFontSize={setLabelFontSize}
           />

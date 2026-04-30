@@ -16,7 +16,7 @@ function ToolPanel({
   onRecalculate,
   analysisResults,
   zoom, setZoom, onReset,
-  activeFilter, setActiveFilter,
+  activeFilters, setActiveFilters,
   labelFontSize, setLabelFontSize,
 }) {
   const [showLegend, setShowLegend] = useState(false)
@@ -30,6 +30,14 @@ function ToolPanel({
   const getLandmarkInfo = (idx) => LANDMARKS.find(l => l.id === idx)
 
   const stepPx = calibrationMmPp ? 0.1 / calibrationMmPp : 1
+
+  // Manejar cambio en checkboxes de trazados
+  const handleFilterChange = (filterName) => {
+    setActiveFilters(prev => ({
+      ...prev,
+      [filterName]: !prev[filterName]
+    }))
+  }
 
   return (
     <div className="space-y-4">
@@ -53,20 +61,41 @@ function ToolPanel({
           <span>Mostrar Nombres/Valores</span>
         </label>
 
-        {/* Selector de Trazado */}
+        {/* Checkboxes para múltiples trazados */}
         <div className="mt-3">
-          <label className="text-xs font-semibold text-gray-600 block mb-1">Trazado a visualizar:</label>
-          <select
-            value={activeFilter}
-            onChange={(e) => setActiveFilter(e.target.value)}
-            className="w-full text-sm p-1 border rounded"
-          >
-            <option value="none">Sin líneas</option>
-            <option value="steiner">Análisis de Steiner</option>
-            <option value="wits">Análisis de Wits</option>
-            <option value="ricketts">Perfil Ricketts</option>
-            <option value="jarabak">Polígono de Jarabak</option>
-          </select>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Trazados a visualizar:</label>
+          <label className="flex items-center space-x-2 text-sm mb-1">
+            <input
+              type="checkbox"
+              checked={activeFilters.steiner}
+              onChange={() => handleFilterChange('steiner')}
+            />
+            <span>Análisis de Steiner</span>
+          </label>
+          <label className="flex items-center space-x-2 text-sm mb-1">
+            <input
+              type="checkbox"
+              checked={activeFilters.wits}
+              onChange={() => handleFilterChange('wits')}
+            />
+            <span>Análisis de Wits</span>
+          </label>
+          <label className="flex items-center space-x-2 text-sm mb-1">
+            <input
+              type="checkbox"
+              checked={activeFilters.ricketts}
+              onChange={() => handleFilterChange('ricketts')}
+            />
+            <span>Perfil Ricketts</span>
+          </label>
+          <label className="flex items-center space-x-2 text-sm">
+            <input
+              type="checkbox"
+              checked={activeFilters.jarabak}
+              onChange={() => handleFilterChange('jarabak')}
+            />
+            <span>Polígono de Jarabak</span>
+          </label>
         </div>
       </div>
 
