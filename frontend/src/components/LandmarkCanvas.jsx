@@ -8,6 +8,7 @@ function LandmarkCanvas({
   showPoints = true,
   showLines = true,
   showGrid = false,
+  showLabels = true,
   pointRadius = null,
   selectedLandmark,
   onSelectLandmark,
@@ -15,9 +16,10 @@ function LandmarkCanvas({
   zoom = 100,
   activeFilter = 'steiner',
   analysisResults = null,
+  labelFontSize = 13,
 }) {
   const canvasRef = useRef(null)
-  const imgRef = useRef(null)       // Imagen cacheada
+  const imgRef = useRef(null)
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 })
   const [hoverIdx, setHoverIdx] = useState(null)
@@ -34,7 +36,7 @@ function LandmarkCanvas({
     return null
   }
 
-  // 1) Cargar imagen UNA vez (no recargar al hacer zoom)
+  // Cargar imagen una vez
   useEffect(() => {
     const finalUrl = getFinalUrl()
     if (!finalUrl) {
@@ -62,7 +64,7 @@ function LandmarkCanvas({
     return () => { img.onload = null; img.onerror = null }
   }, [imageId, imageUrl])
 
-  // 2) Dibujar (se ejecuta al cambiar landmarks, zoom, filtro, etc. SIN recargar imagen)
+  // Dibujar
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !imgLoaded || !imgRef.current) return
@@ -78,7 +80,7 @@ function LandmarkCanvas({
       ctx.save()
       ctx.scale(dpr, dpr)
 
-      // Dibujar imagen (desde cache, no recargar)
+      // Dibujar imagen desde cache
       ctx.drawImage(imgRef.current, 0, 0, imgSize.w, imgSize.h)
 
       const valid = (p) => p && p.x != null && !isNaN(p.x) && !isNaN(p.y)
@@ -120,8 +122,9 @@ function LandmarkCanvas({
 
         const drawLabel = (text, x, y, color, offsetX = 6, offsetY = -6) => {
           if (!text && text !== 0) return
+          if (!showLabels) return
           ctx.save()
-          ctx.font = 'bold 13px sans-serif'
+          ctx.font = `bold ${labelFontSize}px sans-serif`
           ctx.textBaseline = 'top'
           const metrics = ctx.measureText(text)
           const pad = 4
@@ -145,6 +148,7 @@ function LandmarkCanvas({
 
           const nPt = landmarks[4], sPt = landmarks[10]
           const aPt = landmarks[0], bPt = landmarks[2]
+
           if (valid(nPt) && valid(sPt)) {
             drawLabel(`${res.SNA?.toFixed(1) ?? '--'}°`, (nPt.x + sPt.x) / 2, (nPt.y + sPt.y) / 2, '#EF4444')
           }
@@ -152,11 +156,12 @@ function LandmarkCanvas({
             drawLabel(`${res.SNB?.toFixed(1) ?? '--'}°`, (nPt.x + sPt.x) / 2, (nPt.y + sPt.y) / 2 + 16, '#3B82F6')
           }
           if (valid(aPt) && valid(bPt) && valid(nPt)) {
-            const txt = res.ANB != null ? `ANB: ${res.ANB.toFixed(1)}°` : 'ANB: --°'
-            drawLabel(txt, (aPt.x + bPt.x) / 2, nPt.y - 20, '#8B5CF6')
+            const anbText = res.ANB != null ? `ANB: ${res.ANB.toFixed(1)}°` : 'ANB: --°'
+            drawLabel(anbText, (aPt.x + bPt.x) / 2, nPt.y - 20, '#8B5CF6')
           }
           if (res.WITS != null && valid(aPt)) {
-            drawLabel(`Wits: ${res.WITS >= 0 ? '+' : ''}${res.WITS.toFixed(1)}mm`, aPt.x + 10, aPt.y + 30, '#06B6D4')
+            const witsText = `Wits: ${res.WITS >= 0 ? '+' : ''}${res.WITS.toFixed(1)}mm`
+            drawLabel(witsText, aPt.x + 10, aPt.y + 30, '#06B6D4')
           }
         }
 
@@ -211,6 +216,7 @@ function LandmarkCanvas({
         if (activeFilter === 'ricketts') {
           drawLine(28, 27, '#8B5CF6') // Sn -> Pog'
           drawLabel('Linea E', (landmarks[28]?.x + landmarks[27]?.x) / 2 || 0, ((landmarks[28]?.y + landmarks[27]?.y) / 2 || 0) - 12, '#8B5CF6')
+
           const lsPt = landmarks[25]
           const liPt = landmarks[24]
           if (res.Ls_E != null && valid(lsPt)) {
@@ -255,7 +261,7 @@ function LandmarkCanvas({
         ctx.shadowBlur = 0
       }
 
-      // Puntos (colores ESTRICTOS por categoría)
+      // Puntos
       if (showPoints) {
         const rect = canvas.getBoundingClientRect()
         const stretchRatio = rect.width ? (rect.width / imgSize.w) : 1
@@ -300,7 +306,7 @@ function LandmarkCanvas({
     } catch (e) {
       console.error('Error dibujando canvas:', e)
     }
-  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, radius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilter, analysisResults])
+  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, radius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilter, analysisResults, labelFontSize, showLabels])
 
   // Teclado
   useEffect(() => {
@@ -320,7 +326,7 @@ function LandmarkCanvas({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedLandmark, calibrationMmPp, onSelectLandmark])
 
-  // Mouse
+  // Mouse move
   const handleMouseMove = (e) => {
     const canvas = canvasRef.current
     if (!canvas || !imgSize.w) return
@@ -345,9 +351,15 @@ function LandmarkCanvas({
     }
   }
 
+  // Click: toggle selección (clic en punto seleccionado = deseleccionar)
   const handleClick = () => {
-    if (hoverIdx !== null && onSelectLandmark) {
-      onSelectLandmark(hoverIdx, 0, 0, false)
+    if (hoverIdx !== null) {
+      if (hoverIdx === selectedLandmark) {
+        // Toggle: deseleccionar
+        if (onSelectLandmark) onSelectLandmark(null, 0, 0, false)
+      } else {
+        if (onSelectLandmark) onSelectLandmark(hoverIdx, 0, 0, false)
+      }
     }
   }
 

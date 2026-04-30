@@ -16,11 +16,13 @@ function ResultsStep() {
   const [showPoints, setShowPoints] = useState(true)
   const [showLines, setShowLines] = useState(true)
   const [showGrid, setShowGrid] = useState(false)
+  const [showLabels, setShowLabels] = useState(true)
   const [pointRadius, setPointRadius] = useState(null)
   const [selectedLandmark, setSelectedLandmark] = useState(null)
   const [imageSize, setImageSize] = useState({ w: 0, h: 0 })
   const [zoom, setZoom] = useState(100)
   const [activeFilter, setActiveFilter] = useState('steiner')
+  const [labelFontSize, setLabelFontSize] = useState(13)
 
   // Landmarks editables (copia local)
   const [editableLandmarks, setEditableLandmarks] = useState([])
@@ -90,17 +92,15 @@ function ResultsStep() {
       }
       return next
     })
-    if (typeof idx === 'number' && !isDelta) {
-      setSelectedLandmark(idx)
-    }
   }, [])
 
-  // Seleccionar landmark (click en canvas)
+  // Seleccionar landmark (click en canvas) - TOGGLE
   const handleSelectLandmark = useCallback((idx, dx, dy, isDelta) => {
     if (isDelta) {
       handleMoveLandmark(idx, dx, dy, true)
     } else {
-      setSelectedLandmark(idx)
+      // Toggle: si ya está seleccionado, deseleccionar
+      setSelectedLandmark(prev => prev === idx ? null : idx)
     }
   }, [handleMoveLandmark])
 
@@ -128,7 +128,7 @@ function ResultsStep() {
   }
 
   const handleResetLandmarks = async () => {
-    if (window.confirm("Seguro que deseas descartar los cambios y volver a los puntos originales de la IA?")) {
+    if (window.confirm("¿Seguro que deseas descartar los cambios y volver a los puntos originales de la IA?")) {
       const originalStr = sessionStorage.getItem('landmarks') || '[]'
       const original = JSON.parse(originalStr)
       const formatted = original.map((lm) => ({
@@ -137,6 +137,7 @@ function ResultsStep() {
       }))
 
       setEditableLandmarks(formatted)
+      setSelectedLandmark(null) // ← Limpiar selección
 
       if (!calibrationMmpp) return
       setLoading(true)
@@ -175,6 +176,7 @@ function ResultsStep() {
               showPoints={showPoints}
               showLines={showLines}
               showGrid={showGrid}
+              showLabels={showLabels}
               pointRadius={pointRadius}
               selectedLandmark={selectedLandmark}
               onSelectLandmark={handleSelectLandmark}
@@ -182,6 +184,7 @@ function ResultsStep() {
               zoom={zoom}
               activeFilter={activeFilter}
               analysisResults={analysisResults}
+              labelFontSize={labelFontSize}
             />
           )}
         </div>
@@ -195,6 +198,8 @@ function ResultsStep() {
             setShowLines={setShowLines}
             showGrid={showGrid}
             setShowGrid={setShowGrid}
+            showLabels={showLabels}
+            setShowLabels={setShowLabels}
             pointRadius={pointRadius ?? Math.max(4, Math.min(12, (imageSize.w || 512) / 150))}
             setPointRadius={setPointRadius}
             imageWidth={imageSize.w}
@@ -209,6 +214,8 @@ function ResultsStep() {
             onReset={handleResetLandmarks}
             activeFilter={activeFilter}
             setActiveFilter={setActiveFilter}
+            labelFontSize={labelFontSize}
+            setLabelFontSize={setLabelFontSize}
           />
 
           <SteinerTable results={analysisResults} />
