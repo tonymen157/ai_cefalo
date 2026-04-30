@@ -1,6 +1,6 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from src.api.database import get_db
+from src.api.database import get_db, SessionLocal
 from src.api.models import Job
 from src.api.services.landmark_detector import detect_landmarks
 from src.api.services.image_processor import get_image_path
@@ -10,12 +10,14 @@ import uuid
 import json
 import cv2
 import numpy as np
+import asyncio
 
 router = APIRouter()
 
 
-def run_inference(job_id: str, image_id: str, calibration_mmpp: float, db: Session):
-    """Run actual model inference in background."""
+def run_inference(job_id: str, image_id: str, calibration_mmpp: float):
+    """Run actual model inference in a worker thread (DB session created internally)."""
+    db = SessionLocal()
     try:
         # Get image path
         image_path = get_image_path(image_id)
@@ -101,12 +103,13 @@ def run_inference(job_id: str, image_id: str, calibration_mmpp: float, db: Sessi
             job.status = "failed"
             job.error = str(e)
             db.commit()
+    finally:
+        db.close()
 
 
 @router.post("/analyze")
-def start_analysis(
+async def start_analysis(
     data: dict,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Start landmark detection job.
@@ -148,9 +151,9 @@ def start_analysis(
     db.add(job)
     db.commit()
 
-    # Launch background task for actual model inference
-    background_tasks.add_task(
-        run_inference, job_id, image_id, float(calibration_mmpp) if calibration_mmpp is not None else 0.0, db
+    # Launch inference in worker thread (offloads synchronous CPU-bound work from event loop)
+    await asyncio.to_thread(
+        run_inference, job_id, image_id, float(calibration_mmpp) if calibration_mmpp is not None else 0.0
     )
 
     return {
