@@ -98,7 +98,7 @@ function ResultsStep() {
       try {
         const data = await post('/steiner-analysis', {
           landmarks: parsedLandmarks,
-          calibration_mmpp: parsedMmpp,
+          pixel_size_mm: parsedMmpp,
         })
         setAnalysisResults(data)
       } catch (err) {
@@ -144,7 +144,7 @@ function ResultsStep() {
 
       const data = await post('/steiner-analysis', {
         landmarks: payloadLandmarks,
-        calibration_mmpp: calibrationMmpp,
+        pixel_size_mm: calibrationMmpp,
       })
       setAnalysisResults(data)
     } catch (err) {
@@ -195,7 +195,7 @@ function ResultsStep() {
         const payloadLandmarks = formatted.map(lm => [lm.x, lm.y])
         const data = await post('/steiner-analysis', {
           landmarks: payloadLandmarks,
-          calibration_mmpp: calibrationMmpp,
+          pixel_size_mm: calibrationMmpp,
         })
         setAnalysisResults(data)
       } catch (err) {

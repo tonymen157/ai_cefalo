@@ -16,41 +16,15 @@ class SteinerRequest(BaseModel):
     image_id: Optional[str] = None
 
 
-class AngleResult(BaseModel):
-    value: Optional[float] = None
-    classification: Optional[str] = None
-    color: Optional[str] = None
-
-
 class SteinerResponse(BaseModel):
-    SNA: Optional[AngleResult] = None
-    SNB: Optional[AngleResult] = None
-    ANB: Optional[AngleResult] = None
+    SNA: Optional[float] = None
+    SNB: Optional[float] = None
+    ANB: Optional[float] = None
     WITS: Optional[float] = None
     Ls_E: Optional[float] = None
     Li_E: Optional[float] = None
-    skeletal_class: Optional[str] = None
+    clase_esqueletal: Optional[str] = None
     success: bool = True
-
-
-def _classify_angle(value: Optional[float], normal_low: float, normal_high: float) -> str:
-    if value is None:
-        return "N/A"
-    if value < normal_low:
-        return "Below normal"
-    if value > normal_high:
-        return "Above normal"
-    return "Normal"
-
-
-def _angle_color(value: Optional[float], normal_low: float, normal_high: float) -> str:
-    if value is None:
-        return "gray"
-    if value < normal_low:
-        return "blue"
-    if value > normal_high:
-        return "red"
-    return "green"
 
 
 @router.post("/steiner-analysis")
@@ -62,7 +36,7 @@ async def steiner_analysis(request: SteinerRequest):
         request: SteinerRequest with landmarks and optional pixel_size_mm
 
     Returns:
-        SteinerResponse with calculated angles and classifications
+        SteinerResponse with calculated angles
     """
     try:
         import numpy as np
@@ -84,21 +58,14 @@ async def steiner_analysis(request: SteinerRequest):
 
         result = analysis.reporte_json()
 
-        def _make_angle(name: str, value, normal_low: float, normal_high: float) -> AngleResult:
-            return AngleResult(
-                value=value,
-                classification=_classify_angle(value, normal_low, normal_high),
-                color=_angle_color(value, normal_low, normal_high)
-            )
-
         return SteinerResponse(
-            SNA=_make_angle("SNA", result.get("SNA"), 80, 84),
-            SNB=_make_angle("SNB", result.get("SNB"), 76, 80),
-            ANB=_make_angle("ANB", result.get("ANB"), 0, 4),
+            SNA=result.get("SNA"),
+            SNB=result.get("SNB"),
+            ANB=result.get("ANB"),
             WITS=result.get("WITS"),
             Ls_E=result.get("Ls_E"),
             Li_E=result.get("Li_E"),
-            skeletal_class=result.get("clase_esqueletal"),
+            clase_esqueletal=result.get("clase_esqueletal"),
             success=True
         )
 
