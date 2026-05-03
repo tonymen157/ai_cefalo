@@ -122,7 +122,7 @@ def detect_landmarks(image: np.ndarray, orig_w: int = None, orig_h: int = None):
     landmarks_1 = landmarks_norm.cpu().numpy()[0]  # (29, 2) in [0,1]
 
     # Convert to input space (512x512) - heatmap 128px -> input 512px
-    landmarks_512 = landmarks_1.numpy()  # (29, 2) in [0, 1]
+    landmarks_512 = landmarks_1.copy()  # landmarks_1 ya es numpy array
     landmarks_512[:, 0] *= INPUT_SIZE_WH[0]  # x -> Width
     landmarks_512[:, 1] *= INPUT_SIZE_HW[0]  # y -> Height
 
