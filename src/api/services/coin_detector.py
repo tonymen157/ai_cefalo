@@ -2,9 +2,12 @@ import cv2
 import numpy as np
 
 
-def detect_coin(image_path: str) -> float:
-    """Detect $1 USD coin (diameter = 26.5mm) and return mm/pixel ratio.
+def detect_coin(image_path: str, coin_diameter_mm: float = 26.5) -> float:
+    """Detect coin and return mm/pixel ratio.
 
+    Args:
+        image_path: Path to X-ray image.
+        coin_diameter_mm: Coin diameter in mm (default 26.5 for $1 USD).
     Returns:
         mm_per_pixel value if coin detected.
     Raises:
@@ -38,7 +41,7 @@ def detect_coin(image_path: str) -> float:
 
     for circle in circles_sorted:
         pixel_diameter = circle[2] * 2
-        mm_per_pixel = 26.5 / pixel_diameter
+        mm_per_pixel = coin_diameter_mm / pixel_diameter
         if 0.05 < mm_per_pixel < 0.5:  # Reasonable range for dental X-rays
             return round(mm_per_pixel, 6)
 

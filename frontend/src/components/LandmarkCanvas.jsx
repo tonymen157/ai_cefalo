@@ -18,12 +18,14 @@ function LandmarkCanvas({
   activeFilters = { steiner: true, wits: false, ricketts: false, jarabak: false },
   analysisResults = null,
   labelFontSize = 13,
+  hiddenPoints = [],
 }) {
   const canvasRef = useRef(null)
   const imgRef = useRef(null)
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 })
   const [hoverIdx, setHoverIdx] = useState(null)
+  const BASE_IMAGE_WIDTH = 1000
   const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, text: '' })
   const lastMoveTime = useRef(0)
   const THROTTLE_MS = 33 // ~30 fps
@@ -31,7 +33,7 @@ function LandmarkCanvas({
   const getFinalUrl = () => {
     if (imageUrl && imageUrl.startsWith('http')) return imageUrl
     if (imageUrl) return `${BASE_URL}/${imageUrl.replace(/^\//, '')}`
-    if (imageId) return `${BASE_URL}/api/images/pred_${imageId}`
+    if (imageId) return `${BASE_URL}/api/images/pred_${imageId}.jpg`
     return null
   }
 
@@ -87,11 +89,11 @@ function LandmarkCanvas({
       ctx.scale(dpr, dpr)
 
       // Factor de escala dinámico basado en el ancho de la imagen
-      const scaleFactor = imgSize.w / 1000
+      const scaleFactor = imgSize.w / BASE_IMAGE_WIDTH
 
       // ---- FUNCIONES AUXILIARES (definidas fuera de condicionales) ----
 
-      const valid = (p) => p && p.x != null && !isNaN(p.x) && !isNaN(p.y)
+      const valid = (p) => p && p.x != null && !Number.isNaN(p.x) && !Number.isNaN(p.y)
 
       // Función para dibujar etiquetas CON contorno (strokeText)
       const drawLabel = (text, x, y, color, offsetX = 6, offsetY = -6) => {
@@ -379,16 +381,24 @@ function LandmarkCanvas({
       if (showPoints) {
         const dynRadius = (pointRadius ?? Math.max(4, Math.min(12, imgSize.w / 150))) * scaleFactor
         landmarks.forEach((lm, idx) => {
-          if (!lm || lm.x == null || isNaN(lm.x) || isNaN(lm.y)) return
+          if (!lm || lm.x == null || Number.isNaN(lm.x) || Number.isNaN(lm.y)) return
           const info = LANDMARKS[idx]
           if (!info) return
+          if (hiddenPoints.includes(idx)) return
           ctx.beginPath()
           ctx.arc(lm.x, lm.y, idx === selectedLandmark ? dynRadius * 1.5 : dynRadius, 0, Math.PI * 2)
-          ctx.fillStyle = idx === selectedLandmark ? '#FFD700' : info.color
+          const isSel = idx === selectedLandmark
+          ctx.fillStyle = isSel ? '#FFD700' : info.color
           ctx.fill()
+          if (isSel) {
+            ctx.shadowColor = '#FFD700'
+            ctx.shadowBlur = 12 * scaleFactor
+          }
           ctx.strokeStyle = '#FFFFFF'
-          ctx.lineWidth = 1.5 * scaleFactor
+          ctx.lineWidth = isSel ? 3 * scaleFactor : 1.5 * scaleFactor
           ctx.stroke()
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
         })
       }
 
@@ -416,7 +426,7 @@ function LandmarkCanvas({
     } catch (e) {
       console.error('Error dibujando canvas:', e)
     }
-  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, showLabels, pointRadius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilters, analysisResults, labelFontSize])
+  }, [imgLoaded, imgSize, landmarks, showPoints, showLines, showGrid, showLabels, pointRadius, selectedLandmark, hoverIdx, tooltip, zoom, activeFilters, analysisResults, labelFontSize, hiddenPoints])
 
   // Teclado
   useEffect(() => {
@@ -445,6 +455,7 @@ function LandmarkCanvas({
     const canvas = canvasRef.current
     if (!canvas || !imgSize.w) return
     const rect = canvas.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
 
     // Factor de escala: el canvas puede estar escalado por CSS (width: 100%)
     const scaleX = imgSize.w / rect.width
@@ -453,12 +464,12 @@ function LandmarkCanvas({
     const x = (e.clientX - rect.left) * scaleX
     const y = (e.clientY - rect.top) * scaleY
 
-    const scaleFactor = imgSize.w / 1000
+    const scaleFactor = imgSize.w / BASE_IMAGE_WIDTH
     const effectiveRadius = (pointRadius ?? Math.max(4, Math.min(12, imgSize.w / 150))) * scaleFactor
 
     let found = null
     landmarks.forEach((lm, idx) => {
-      if (!lm || lm.x == null || isNaN(lm.x)) return
+      if (!lm || lm.x == null || Number.isNaN(lm.x)) return
       const dist = Math.sqrt((x - lm.x) ** 2 + (y - lm.y) ** 2)
       if (dist < effectiveRadius + 8 * scaleFactor) found = idx
     })
@@ -478,6 +489,11 @@ function LandmarkCanvas({
         if (onSelectLandmark) onSelectLandmark(null, 0, 0, false)
       } else {
         if (onSelectLandmark) onSelectLandmark(hoverIdx, 0, 0, false)
+      }
+    } else {
+      // Fondo: deseleccionar
+      if (onSelectLandmark && selectedLandmark !== null) {
+        onSelectLandmark(null, 0, 0, false)
       }
     }
   }

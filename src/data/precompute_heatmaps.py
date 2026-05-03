@@ -26,7 +26,7 @@ import cv2
 import json
 
 from src.core.config import HEATMAP_SIZE_HW, SIGMA_HEATMAP, NUM_LANDMARKS
-from src.core.geometry import generate_heatmap
+from src.analysis.geometry_utils import generate_heatmap
 
 
 def scale_landmarks_with_padding(landmarks, orig_w, orig_h, target_w, target_h):
@@ -44,11 +44,14 @@ def scale_landmarks_with_padding(landmarks, orig_w, orig_h, target_w, target_h):
 
 def _parse_landmarks(annotations_list):
     """Extrae pares (x, y) del formato Aariz."""
-    pts = np.zeros((NUM_LANDMARKS, 2), dtype=np.float32)
+    pts = np.full((NUM_LANDMARKS, 2), np.nan, dtype=np.float32)
     for i, lm in enumerate(annotations_list[:NUM_LANDMARKS]):
         val = lm.get("value", {})
-        pts[i, 0] = float(val.get("x", 0.0))
-        pts[i, 1] = float(val.get("y", 0.0))
+        x_val = val.get("x")
+        y_val = val.get("y")
+        if x_val is not None and y_val is not None:
+            pts[i, 0] = float(x_val)
+            pts[i, 1] = float(y_val)
     return pts
 
 

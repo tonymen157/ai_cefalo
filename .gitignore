@@ -52,3 +52,4 @@ private_archive/
 
 # Temp files
 *.txt
+frontend/.env

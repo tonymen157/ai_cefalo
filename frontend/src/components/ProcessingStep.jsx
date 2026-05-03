@@ -7,6 +7,7 @@ function ProcessingStep() {
   const [status, setStatus] = useState('idle') // idle | pending | processing | completed | failed
   const [progress, setProgress] = useState(0)
   const [landmarks, setLandmarks] = useState(null)
+  const [pollAttempts, setPollAttempts] = useState(0)
   const navigate = useNavigate()
   const { post, get } = useApi()
 
@@ -33,6 +34,7 @@ function ProcessingStep() {
         setJobId(data.job_id)
         sessionStorage.setItem('job_id', data.job_id)
         localStorage.setItem('job_id', data.job_id)
+        setPollAttempts(0)
         pollStatus(data.job_id)
       } catch (err) {
         setStatus('failed')
@@ -47,10 +49,15 @@ function ProcessingStep() {
         const data = await get(`/jobs/${jobId}`)
         setStatus(data.status)
         setProgress(data.progress || 0)
+        setPollAttempts(prev => prev + 1)
+
         if (data.status === 'completed') {
           clearInterval(interval)
           setLandmarks(data.landmarks)
           sessionStorage.setItem('landmarks', JSON.stringify(data.landmarks))
+          if (data.confidences) {
+            sessionStorage.setItem('confidences', JSON.stringify(data.confidences))
+          }
           setTimeout(() => navigate('/results'), 1000)
         } else if (data.status === 'failed') {
           clearInterval(interval)
@@ -59,6 +66,15 @@ function ProcessingStep() {
         clearInterval(interval)
         setStatus('failed')
       }
+
+      // Límite: 30 intentos (60 segundos)
+      setPollAttempts(prev => {
+        if (prev >= 29) {
+          clearInterval(interval)
+          setStatus('failed')
+        }
+        return prev
+      })
     }, 2000)
   }
 
@@ -75,13 +91,45 @@ function ProcessingStep() {
             />
           </div>
           <p className="text-gray-600">Progreso: {Math.round(progress * 100)}%</p>
+          <p className="text-xs text-gray-400 mt-2">Intento {pollAttempts + 1} de 30</p>
         </div>
       )}
       {status === 'completed' && (
         <p className="text-green-600">¡Análisis completado! Redirigiendo...</p>
       )}
       {status === 'failed' && (
-        <p className="text-red-500">Error en el procesamiento. Intenta de nuevo.</p>
+        <div className="text-center">
+          <p className="text-red-500 mb-4">⚠️ Error: El servidor no respondió después de 60 segundos o ocurrió un error.</p>
+          <button
+            onClick={() => {
+              setStatus('idle')
+              setPollAttempts(0)
+              const imageId = sessionStorage.getItem('image_id') || localStorage.getItem('image_id')
+              const mmpp = sessionStorage.getItem('calibration_mmpp')
+              if (imageId) {
+                setStatus('pending')
+                post('/analyze', { image_id: imageId, calibration_mmpp: mmpp ? parseFloat(mmpp) : null })
+                  .then(data => {
+                    setJobId(data.job_id)
+                    sessionStorage.setItem('job_id', data.job_id)
+                    localStorage.setItem('job_id', data.job_id)
+                    setPollAttempts(0)
+                    pollStatus(data.job_id)
+                  })
+                  .catch(() => setStatus('failed'))
+              }
+            }}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 mr-4"
+          >
+            ↻ Volver a intentar
+          </button>
+          <button
+            onClick={() => navigate('/upload')}
+            className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400"
+          >
+            Regresar al inicio
+          </button>
+        </div>
       )}
     </div>
   )

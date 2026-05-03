@@ -48,11 +48,11 @@ class UNetResNet50(nn.Module):
         return self.decode_heatmaps(heatmaps)
 
     def decode_heatmaps(self, heatmaps):
-        """Soft-argmax decoding con ventana 3x3 para sub-pixel.
+        """Decode heatmaps con refinamiento sub-píxel de segundo orden (ajuste parabólico).
 
-        Usa cálculo de centroide local en ventana 3x3 alrededor del pico
-        para obtener coordenadas fraccionales (sub-píxel), eliminando
-        errores de discretización del argmax estándar.
+        Tras encontrar el pico entero (px, py), extrae los vecinos inmediatos
+        y aplica un ajuste cuadrático (Taylor de 2º orden) para obtener
+        coordenadas sub-píxel con precisión teórica de ~0.25 píxeles.
 
         Args:
             heatmaps: (N, 29, H, W) - (N, C, H, W) con sigmoid aplicado
@@ -69,36 +69,40 @@ class UNetResNet50(nn.Module):
         px = (idx % W).float()
         py = (idx // W).float()
 
-        # Soft-argmax en ventana 3x3 para precisión sub-píxel
-        py_c = torch.clamp(py, 1, H - 2).long()
-        px_c = torch.clamp(px, 1, W - 2).long()
+        # --- MEJORA V51.0: REFINAMIENTO SUB-PÍXEL ---
+        # Ajuste parabólico de segundo orden (aproximación de Taylor)
+        # H0 = pico, H1p = vecino derecha/abajo, H1m = vecino izquierda/arriba
 
-        offs = torch.tensor([-1, 0, 1], dtype=torch.long, device=device)
-        yyi, xxi = torch.meshgrid(offs, offs, indexing='ij')
+        px_l = torch.clamp(px.long() - 1, 0, W - 1)
+        px_r = torch.clamp(px.long() + 1, 0, W - 1)
+        py_u = torch.clamp(py.long() - 1, 0, H - 1)
+        py_d = torch.clamp(py.long() + 1, 0, H - 1)
 
-        n_idx = torch.arange(N, device=device).view(N, 1, 1, 1).expand(N, C, 3, 3)
-        c_idx = torch.arange(C, device=device).view(1, C, 1, 1).expand(N, C, 3, 3)
-        py_3d = py_c.view(N, C, 1, 1).expand(N, C, 3, 3)
-        px_3d = px_c.view(N, C, 1, 1).expand(N, C, 3, 3)
-        yyi_3d = yyi.view(1, 1, 3, 3).expand(N, C, 3, 3)
-        xxi_3d = xxi.view(1, 1, 3, 3).expand(N, C, 3, 3)
+        px_c = px.long().clamp(0, W - 1)
+        py_c = py.long().clamp(0, H - 1)
 
-        patches = heatmaps[n_idx, c_idx, py_3d + yyi_3d, px_3d + xxi_3d]
+        n_idx = torch.arange(N, device=device).view(N, 1).expand(N, C)
+        c_idx = torch.arange(C, device=device).view(1, C).expand(N, C)
 
-        w = torch.softmax(patches.view(N, C, 9), dim=-1).view(N, C, 3, 3)
+        H0 = heatmaps[n_idx, c_idx, py_c, px_c]       # (N, C) - pico central
+        H1m_x = heatmaps[n_idx, c_idx, py_c, px_l]  # vecino izquierda
+        H1p_x = heatmaps[n_idx, c_idx, py_c, px_r]  # vecino derecha
+        H1m_y = heatmaps[n_idx, c_idx, py_u, px_c]  # vecino arriba
+        H1p_y = heatmaps[n_idx, c_idx, py_d, px_c]  # vecino abajo
 
-        off_f = torch.tensor([-1.0, 0.0, 1.0], dtype=torch.float32, device=device)
-        yyf, xxf = torch.meshgrid(off_f, off_f, indexing='ij')
-        yyf_3d = yyf.view(1, 1, 3, 3).expand(N, C, 3, 3)
-        xxf_3d = xxf.view(1, 1, 3, 3).expand(N, C, 3, 3)
+        # Refinamiento en X: dx = (H1p - H1m) / (2*(2*H0 - H1p - H1m) + eps)
+        denom_x = (2.0 * H0 - H1p_x - H1m_x) * 2.0 + 1e-7
+        dx = (H1p_x - H1m_x) / denom_x
 
-        eps = 1e-8
-        sum_w = w.sum(dim=(2, 3)) + eps
-        dy = (w * yyf_3d).sum(dim=(2, 3)) / sum_w
-        dx = (w * xxf_3d).sum(dim=(2, 3)) / sum_w
+        # Refinamiento en Y
+        denom_y = (2.0 * H0 - H1p_y - H1m_y) * 2.0 + 1e-7
+        dy = (H1p_y - H1m_y) / denom_y
 
-        # Normalizar a [0,1] usando dimensiones dinámicas del heatmap
-        x_sp = torch.clamp((px + dx) / W, 0.0, 1.0)
-        y_sp = torch.clamp((py + dy) / H, 0.0, 1.0)
+        # Limitar el desplazamiento a +/- 0.5 píxeles para evitar divergencias
+        dx = torch.clamp(dx, -0.5, 0.5)
+        dy = torch.clamp(dy, -0.5, 0.5)
 
-        return torch.stack([x_sp, y_sp], dim=-1)
+        x_refined = (px + dx) / W
+        y_refined = (py + dy) / H
+
+        return torch.stack([x_refined, y_refined], dim=-1)

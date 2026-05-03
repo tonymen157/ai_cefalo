@@ -23,8 +23,10 @@ class Job(Base):
     status = Column(String(20), default="pending", nullable=False)
     progress = Column(Float, default=0.0, nullable=False)
     landmarks = Column(Text, nullable=True)  # JSON string of 29 landmarks
+    confidences = Column(Text, nullable=True)  # JSON string of 29 confidence values
     analysis_results = Column(Text, nullable=True)  # JSON string of full Phase 2 analysis (16 values)
     pred_image_path = Column(String(255), nullable=True)  # Path to predicted image
+    system_warnings = Column(Text, nullable=True)  # JSON string of anatomical warnings
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)

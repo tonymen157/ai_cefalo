@@ -22,6 +22,7 @@ function ResultsStep() {
   const [imageSize, setImageSize] = useState({ w: 0, h: 0 })
   const [zoom, setZoom] = useState(100)
   const [labelFontSize, setLabelFontSize] = useState(13)
+  const BASE_IMAGE_WIDTH = 1000;
 
   // Estado para múltiples trazados (checkboxes)
   const [activeFilters, setActiveFilters] = useState({
@@ -34,6 +35,8 @@ function ResultsStep() {
   // Landmarks editables (copia local)
   const [editableLandmarks, setEditableLandmarks] = useState([])
   const [calibrationMmpp, setCalibrationMmpp] = useState(null)
+  const [confidences, setConfidences] = useState(null)
+  const [hiddenPoints, setHiddenPoints] = useState([])
 
   // Persistir resultados en sessionStorage para el PDF
   useEffect(() => {
@@ -51,6 +54,7 @@ function ResultsStep() {
     const mmpp = sessionStorage.getItem('calibration_mmpp')
     const imageId = sessionStorage.getItem('image_id') || localStorage.getItem('image_id')
     const jobId = sessionStorage.getItem('job_id') || localStorage.getItem('job_id')
+    const confidencesStr = sessionStorage.getItem('confidences')
 
     if (imageId) {
       sessionStorage.setItem('image_id', imageId)
@@ -69,6 +73,14 @@ function ResultsStep() {
     const parsedMmpp = parseFloat(mmpp)
     setCalibrationMmpp(parsedMmpp || null)
 
+    if (confidencesStr) {
+      try {
+        setConfidences(JSON.parse(confidencesStr))
+      } catch (e) {
+        console.error('Error parsing confidences:', e)
+      }
+    }
+
     const parsedLandmarks = JSON.parse(landmarks)
     const formatted = parsedLandmarks.map((lm, idx) => ({
       x: Array.isArray(lm) ? lm[0] : lm.x ?? lm[0] ?? 0,
@@ -77,7 +89,7 @@ function ResultsStep() {
     setEditableLandmarks(formatted)
 
     const calculate = async () => {
-      if (!parsedMmpp || isNaN(parsedMmpp) || parsedMmpp <= 0) {
+      if (!parsedMmpp || Number.isNaN(parsedMmpp) || parsedMmpp <= 0) {
         setError('Calibración no válida. Por favor configura la escala en el paso anterior.')
         setLoading(false)
         return
@@ -126,6 +138,7 @@ function ResultsStep() {
   const handleRecalculate = async () => {
     if (!calibrationMmpp || !editableLandmarks.length) return
     setLoading(true)
+    setError('')
     try {
       const payloadLandmarks = editableLandmarks.map(lm => [lm.x, lm.y])
 
@@ -135,7 +148,14 @@ function ResultsStep() {
       })
       setAnalysisResults(data)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error recalculando análisis')
+      const status = err.response?.status
+      if (status === 400) {
+        setError('⚠️ ' + (err.response?.data?.detail || 'Calibración inválida. Verifica la configuración.'))
+      } else if (status === 413) {
+        setError('⚠️ El archivo es demasiado grande. Máximo 10MB.')
+      } else {
+        setError(err.response?.data?.detail || 'Error recalculando análisis')
+      }
     } finally {
       setLoading(false)
     }
@@ -230,6 +250,7 @@ function ResultsStep() {
               activeFilters={activeFilters}
               analysisResults={analysisResults}
               labelFontSize={labelFontSize}
+              hiddenPoints={hiddenPoints}
             />
           )}
         </div>
@@ -245,7 +266,7 @@ function ResultsStep() {
             setShowGrid={setShowGrid}
             showLabels={showLabels}
             setShowLabels={setShowLabels}
-            pointRadius={pointRadius ?? Math.max(4, Math.min(12, (imageSize.w || 512) / 150))}
+            pointRadius={pointRadius ?? Math.max(4, Math.min(12, (imageSize.w || BASE_IMAGE_WIDTH) / 150))}
             setPointRadius={setPointRadius}
             imageWidth={imageSize.w}
             selectedLandmark={selectedLandmark}
@@ -261,9 +282,13 @@ function ResultsStep() {
             setActiveFilters={setActiveFilters}
             labelFontSize={labelFontSize}
             setLabelFontSize={setLabelFontSize}
+            loading={loading}
+            hiddenPoints={hiddenPoints}
+            setHiddenPoints={setHiddenPoints}
+            confidences={confidences}
           />
 
-          <SteinerTable results={analysisResults} />
+          <SteinerTable key={analysisResults?.clase_esqueletal} results={analysisResults} />
 
           <button
             onClick={handleDownload}

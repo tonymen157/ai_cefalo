@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Añadir path para evitar ModuleNotFoundError
-sys.path.append(str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 app = FastAPI(
     title="AI-Cefalo",
@@ -16,20 +16,23 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# CORS - Solo variable de entorno (sin defaults inseguros en producción)
+# CORS - Configuración para desarrollo y producción
 from os import getenv
 ALLOWED_ORIGINS = getenv("ALLOWED_ORIGINS", "")
 if ALLOWED_ORIGINS:
-    ALLOWED_ORIGINS = ALLOWED_ORIGINS.split(",")
+    ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS.split(",") if origin.strip()]
 else:
-    ALLOWED_ORIGINS = []  # Sin acceso por defecto si no se configura
+    ALLOWED_ORIGINS = ["http://127.0.0.1:3000", "http://localhost:3000",
+                     "http://127.0.0.1:5173", "http://localhost:5173"]
+print(f"[CORS] Allowed origins: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Routers
@@ -56,11 +59,3 @@ init_db()
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-# Registro directo del endpoint upload
-from fastapi import UploadFile, File
-from src.api.routers.upload import upload_image
-
-@app.post("/api/upload-image")
-async def upload_image_endpoint(file: UploadFile = File(...)):
-    return await upload_image(file)

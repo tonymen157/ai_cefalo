@@ -36,7 +36,7 @@ def scale_landmarks_to_original(landmarks_512, orig_w, orig_h, x_offset, y_offse
     from src.core.config import INPUT_SIZE_WH, INPUT_SIZE_HW
     landmarks_orig = landmarks_512.copy()
     landmarks_orig[:, 0] = (landmarks_512[:, 0] - x_offset) / INPUT_SIZE_WH[0] * orig_w
-    landmarks_orig[:, 1] = (landmarks_512[:, 1] - y_offset) / INPUT_SIZE_HW[0] * orig_h
+    landmarks_orig[:, 1] = (landmarks_512[:, 1] - y_offset) / INPUT_SIZE_WH[1] * orig_h
     return landmarks_orig
 
 

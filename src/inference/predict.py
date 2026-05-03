@@ -29,7 +29,7 @@ import sys
 sys.path.insert(0, str(BASE_DIR))
 
 # Configuraciones de red
-from src.core.config import INPUT_SIZE_WH, INPUT_SIZE_HW, NUM_LANDMARKS
+from src.core.config import INPUT_SIZE_WH, INPUT_SIZE_HW, NUM_LANDMARKS, FALLBACK_SCALE
 from src.models.unet import UNetResNet50
 
 
@@ -45,8 +45,9 @@ def preprocess_clahe_nlm(img_raw):
     Preprocesamiento CLAHE + NLM + Z-score (SSOT).
     Mantiene tamaño original para escalado posterior.
     """
-    # CLAHE
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    # CLAHE (SSOT from config)
+    from src.core.config import CLAHE_CLIP_LIMIT, CLAHE_TILE_GRID_SIZE
+    clahe = cv2.createCLAHE(clipLimit=CLAHE_CLIP_LIMIT, tileGridSize=CLAHE_TILE_GRID_SIZE)
     img_clahe = clahe.apply(img_raw)
 
     # NLM Denoising
@@ -137,7 +138,10 @@ def main():
     # 5. Redimensionar a INPUT_SIZE_WH (512x512) para el modelo
     # Usamos letterboxing para preservar aspect ratio
     target_w, target_h = INPUT_SIZE_WH
-    scale_model = min(target_w / W_orig, target_h / H_orig)
+    if W_orig <= 0 or H_orig <= 0:
+        scale_model = FALLBACK_SCALE  # Fallback si W_orig/H_orig <= 0
+    else:
+        scale_model = min(target_w / W_orig, target_h / H_orig)
     new_w = int(W_orig * scale_model)
     new_h = int(H_orig * scale_model)
 
@@ -173,13 +177,15 @@ def main():
     coords_512[:, :, 0] -= x_pad
     coords_512[:, :, 1] -= y_pad
 
-    # 7c. **ESCALA NO-UNIFORME**: Llevar a tamaño original
-    #     scale_x ≠ scale_y para preservar proporciones reales
-    scale_x = W_orig / (new_w * scale_model) if new_w > 0 else 1.0
-    scale_y = H_orig / (new_h * scale_model) if new_h > 0 else 1.0
-    # Simplificando: la imagen se escaló por 'scale_model', así que:
-    scale_x_true = W_orig / new_w if new_w > 0 else 1.0
-    scale_y_true = H_orig / new_h if new_h > 0 else 1.0
+    # 7c. ESCALA NO-UNIFORME: llevar a tamaño original
+    if new_w <= 0:
+        scale_x_true = FALLBACK_SCALE
+    else:
+        scale_x_true = W_orig / new_w
+    if new_h <= 0:
+        scale_y_true = FALLBACK_SCALE
+    else:
+        scale_y_true = H_orig / new_h
 
     coords_orig = coords_512.clone()
     coords_orig[:, :, 0] *= scale_x_true  # Escala X
@@ -282,12 +288,15 @@ def main():
     print(f"\n[Output] Imagen guardada: {args.output}")
 
     # Determinar clase esquelética basado en ANB
+    # ANB > 4: Clase II (maxilar adelantado o mandíbula retraída)
+    # ANB < 0: Clase III (mandíbula adelantada o maxilar retraído)
+    # 0 <= ANB <= 4: Clase I (normal)
     anb = full_analysis.get("ANB")
     if anb is not None:
         if anb > 4:
-            clase = "Clase III"
-        elif anb > 2:
             clase = "Clase II"
+        elif anb < 0:
+            clase = "Clase III"
         else:
             clase = "Clase I"
     else:

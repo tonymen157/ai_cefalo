@@ -15,7 +15,7 @@ from src.core.config import (
     HEATMAP_SIZE_HW,
     get_sigma_heatmap,
 )
-from src.core.geometry import generate_heatmap
+from src.analysis.geometry_utils import generate_heatmap
 
 
 class AarizDataset(Dataset):
@@ -105,7 +105,10 @@ class AarizDataset(Dataset):
         with open(csv_path, newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                pixel_size = float(row.get("pixel_size", 1.0))
+                pixel_size_raw = row.get("pixel_size")
+                if pixel_size_raw is None or float(pixel_size_raw) <= 0:
+                    continue
+                pixel_size = float(pixel_size_raw)
                 mode = row.get("mode", "").strip()
                 if mode.upper() == self.mode:
                     self.calibration[row["cephalogram_id"].strip()] = pixel_size
@@ -190,7 +193,9 @@ class AarizDataset(Dataset):
         )  # (29, 2) en espacio INPUT_SIZE_WH
 
         cvm_stage = self._load_cvm(stem)
-        pixel_size = self.calibration.get(stem, 1.0)
+        pixel_size = self.calibration.get(stem)
+        if pixel_size is None or pixel_size <= 0:
+            pixel_size = None
 
         # 3. DATA AUGMENTATION con matriz afín rigurosa (solo TRAIN)
         if self.mode == "TRAIN":
@@ -241,8 +246,8 @@ class AarizDataset(Dataset):
         # 5. Generar heatmaps dinámicos
         # Escalar landmarks de INPUT_SIZE_WH a HEATMAP_SIZE_WH
         landmarks_heatmap = landmarks_scaled.copy()
-        landmarks_heatmap[:, 0] *= HEATMAP_SIZE_WH[0] / INPUT_SIZE_WH[0]
-        landmarks_heatmap[:, 1] *= HEATMAP_SIZE_HW[0] / INPUT_SIZE_HW[1]
+        landmarks_heatmap[:, 0] *= HEATMAP_SIZE_WH[0] / INPUT_SIZE_WH[0]  # x: ancho
+        landmarks_heatmap[:, 1] *= HEATMAP_SIZE_HW[0] / INPUT_SIZE_HW[0]  # y: alto
 
         heatmaps_tensor = generate_heatmap(
             landmarks_heatmap,

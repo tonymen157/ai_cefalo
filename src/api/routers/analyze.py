@@ -1,3 +1,4 @@
+from src.core.config import MIN_PIXEL_SIZE_MM, MAX_PIXEL_SIZE_MM
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from src.api.database import get_db, SessionLocal
@@ -25,15 +26,44 @@ def run_inference(job_id: str, image_id: str, calibration_mmpp: float):
             raise FileNotFoundError(f"Image not found: {image_id}")
 
         # Load image in original color for visualization
-        img_color = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+        # Read image as bytes then decode to guarantee 3 channels (IMREAD_COLOR)
+        with open(image_path, "rb") as img_f:
+            img_bytes = img_f.read()
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img_color = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img_color is None:
             raise ValueError(f"Could not read image: {image_path}")
 
+        # shape[:2] is safe: (H, W, C)[:2] -> (H, W)
         orig_h, orig_w = img_color.shape[:2]
 
         # Load grayscale for inference
         img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
-        landmarks = detect_landmarks(img_gray, orig_w=orig_w, orig_h=orig_h)
+        landmarks, confidences = detect_landmarks(img_gray, orig_w=orig_w, orig_h=orig_h)
+
+        # --- AUDITORÍA ANATÓMICA (Sanity Checks) ---
+        system_warnings = []
+        try:
+            # Regla de Oro 1: El Nasion (frente) debe estar arriba del Menton (barbilla)
+            if landmarks[4][1] >= landmarks[3][1]:
+                confidences[4] = 0.0
+                confidences[3] = 0.0
+                system_warnings.append("Inconsistencia: Nasion no está arriba de Menton")
+
+            # Regla de Oro 2: La Sella Turca debe estar arriba del punto Articular
+            if landmarks[10][1] >= landmarks[11][1]:
+                confidences[10] = 0.0
+                confidences[11] = 0.0
+                system_warnings.append("Inconsistencia: Sella no está arriba de Articular")
+
+            # Regla de Oro 3: El Nasion [4] debe estar arriba del punto Subespinal (A-point) [0]
+            if landmarks[4][1] >= landmarks[0][1]:
+                confidences[4] = 0.0
+                confidences[0] = 0.0
+                system_warnings.append("Inconsistencia: Nasion no está arriba de A-point")
+
+        except (IndexError, TypeError):
+            pass
 
         # Draw landmarks on image (same style as predict.py)
         colors = [
@@ -46,7 +76,7 @@ def run_inference(job_id: str, image_id: str, calibration_mmpp: float):
         ]
 
         from src.core.landmarks import LANDMARK_NAMES
-        for i, (x, y) in enumerate(landmarks):
+        for i, (x, y) in enumerate(landmarks.tolist()):
             x_int, y_int = int(round(x)), int(round(y))
             color = colors[i % len(colors)]
 
@@ -81,6 +111,8 @@ def run_inference(job_id: str, image_id: str, calibration_mmpp: float):
             job.status = "completed"
             job.progress = 100.0
             job.landmarks = json.dumps(landmarks.tolist())
+            job.confidences = json.dumps(confidences.tolist())
+            job.system_warnings = json.dumps(system_warnings)
             job.pred_image_path = str(pred_path)
 
             # Ejecutar motor Fase 2 y guardar análisis completo
@@ -88,7 +120,7 @@ def run_inference(job_id: str, image_id: str, calibration_mmpp: float):
                 analisis = CephalometricAnalysis(
                     coords=landmarks,
                     nombre_imagen=image_id,
-                    escala_mm=calibration_mmpp if calibration_mmpp > 0 else None,
+                    escala_mm=calibration_mmpp if calibration_mmpp is not None and calibration_mmpp > 0 else None,
                 )
                 full_analysis = analisis.reporte_json()
                 job.analysis_results = json.dumps(full_analysis)
@@ -140,11 +172,18 @@ async def start_analysis(
         else:
             calibration_mmpp = None
 
+    # Guard de seguridad: validar calibración clínica ANTES de lanzar inferencia
+    if calibration_mmpp is None or calibration_mmpp == 0 or calibration_mmpp < MIN_PIXEL_SIZE_MM or calibration_mmpp > MAX_PIXEL_SIZE_MM:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Calibración clínica inválida o ausente. Debe calibrar la imagen primero."
+        )
+
     job_id = str(uuid.uuid4())
     job = Job(
         id=job_id,
         image_id=image_id,
-        calibration_mmpp=float(calibration_mmpp) if calibration_mmpp is not None else 0.0,
+        calibration_mmpp=float(calibration_mmpp) if calibration_mmpp is not None else None,
         status="processing",
         progress=0.0,
     )
@@ -153,7 +192,7 @@ async def start_analysis(
 
     # Launch inference in worker thread (offloads synchronous CPU-bound work from event loop)
     await asyncio.to_thread(
-        run_inference, job_id, image_id, float(calibration_mmpp) if calibration_mmpp is not None else 0.0
+        run_inference, job_id, image_id, float(calibration_mmpp) if calibration_mmpp is not None else None
     )
 
     return {
@@ -186,5 +225,9 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
         response["error"] = job.error
     if job.pred_image_path:
         response["pred_image_path"] = job.pred_image_path
+    if job.confidences:
+        response["confidences"] = json.loads(job.confidences)
+    if job.system_warnings:
+        response["system_warnings"] = json.loads(job.system_warnings)
 
     return response

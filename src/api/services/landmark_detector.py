@@ -44,7 +44,7 @@ def preprocess_image(img: np.ndarray):
     Args:
         img: Grayscale image (H, W) as numpy array
     Returns:
-        tensor: (1, 1, 512, 512) - PyTorch (N, C, H, W)
+        tensor: (1, 1, INPUT_SIZE_HW[0], INPUT_SIZE_HW[1]) - PyTorch (N, C, H, W)
         scale: scaling factor used in letterboxing
         x_offset: x padding offset
         y_offset: y padding offset
@@ -55,7 +55,7 @@ def preprocess_image(img: np.ndarray):
 
 
 def detect_landmarks(image: np.ndarray, orig_w: int = None, orig_h: int = None):
-    """Run inference and return 29 landmarks as (29, 2) array in original image coords.
+    """Run inference and return 29 landmarks and confidences.
 
     Uses proper letterboxing inverse transformation to handle non-square images.
 
@@ -65,6 +65,7 @@ def detect_landmarks(image: np.ndarray, orig_w: int = None, orig_h: int = None):
         orig_h: Original image height (if None, uses image height)
     Returns:
         landmarks: (29, 2) in original image coordinates (W, H)
+        confidences: (29,) confidence values in [0.0, 1.0]
     """
     if orig_w is None:
         orig_w = image.shape[1]
@@ -77,20 +78,57 @@ def detect_landmarks(image: np.ndarray, orig_w: int = None, orig_h: int = None):
     tensor, scale, x_offset, y_offset = preprocess_image(image)
     tensor = tensor.to(_device)
 
-    # Inference
+    # INFERENCIA CON TTA (Solo Iluminación - Rollback V46.0)
     with torch.no_grad():
-        heatmaps = model(tensor)  # (1, 29, 128, 128)
-        landmarks_norm = model.decode_heatmaps(heatmaps)  # (1, 29, 2) in [0, 1]
+        # Crear variantes de iluminación (Clamp para no salir del rango normalizado)
+        tensor_normal = tensor
+        tensor_bright = torch.clamp(tensor * 1.2, max=tensor.max().item())
+        tensor_dark = tensor * 0.8
+
+        # Pasar las 3 variantes por el modelo
+        hm_normal = model(tensor_normal)
+        hm_bright = model(tensor_bright)
+        hm_dark = model(tensor_dark)
+
+        # Promediar los heatmaps
+        heatmaps = 0.5 * hm_normal + 0.25 * hm_bright + 0.25 * hm_dark
+
+        # --- MEJORA V50.0: SUAVIZADO GAUSSIANO ---
+        # Aplicamos un desenfoque leve para eliminar picos de ruido falsos
+        # Sigma dinámico desde config (se ajusta a cualquier tamaño de heatmap)
+        from src.core.config import get_sigma_heatmap
+        kernel_size = 3
+        sigma = get_sigma_heatmap()
+
+        # Crear kernel gaussiano 2D
+        x = torch.arange(kernel_size).to(_device) - (kernel_size - 1) / 2
+        g = torch.exp(-x.pow(2) / (2 * sigma**2))
+        g = g / g.sum()
+        kernel = g.view(1, 1, -1, 1) * g.view(1, 1, 1, -1)
+        kernel = kernel.repeat(29, 1, 1, 1)  # Repetir para los 29 canales (landmarks)
+
+        # Aplicar convolución para suavizar cada canal de heatmap individualmente
+        heatmaps = torch.nn.functional.pad(heatmaps, (1, 1, 1, 1), mode='replicate')
+        heatmaps = torch.nn.functional.conv2d(heatmaps, kernel, groups=29)
+        # ------------------------------------------
+
+        # Decodificación: soft-argmax con ventana 3x3
+        landmarks_norm = model.decode_heatmaps(heatmaps)  # (1, 29, 2) en [0, 1]
+
+        # EXTRACCIÓN DE CONFIDENCE
+        confidences = heatmaps.view(1, 29, -1).max(dim=-1)[0].cpu().numpy()[0]  # (29,)
 
     # decode_heatmaps returns coords in [0,1] relative to heatmap (128x128)
     landmarks_1 = landmarks_norm.cpu().numpy()[0]  # (29, 2) in [0,1]
 
     # Convert to input space (512x512) - heatmap 128px -> input 512px
-    landmarks_512 = landmarks_1 * INPUT_SIZE_WH[0]  # Now in [0, 512] canvas space
+    landmarks_512 = landmarks_1.numpy()  # (29, 2) in [0, 1]
+    landmarks_512[:, 0] *= INPUT_SIZE_WH[0]  # x -> Width
+    landmarks_512[:, 1] *= INPUT_SIZE_HW[0]  # y -> Height
 
     # Inverse letterboxing: remove padding, then scale back using REAL scale
     landmarks_orig = landmarks_512.copy()
     landmarks_orig[:, 0] = (landmarks_512[:, 0] - x_offset) / scale
     landmarks_orig[:, 1] = (landmarks_512[:, 1] - y_offset) / scale
 
-    return landmarks_orig.astype(np.float32)
+    return landmarks_orig.astype(np.float32), confidences.astype(np.float32)

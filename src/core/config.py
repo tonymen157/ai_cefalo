@@ -20,18 +20,33 @@ HEATMAP_SIZE_HW = (128, 128)   # (Alto, Ancho)
 SIGMA_RATIO = 5.0 / HEATMAP_SIZE_HW[1]  # sigma = 5.0 para heatmap de 128px
 # SIGMA_HEATMAP ya NO es una constante hardcodeada, se calcula en runtime:
 
+# Parámetros de preprocesamiento (SSOT - evitar magic numbers)
+CLAHE_CLIP_LIMIT = 2.0
+CLAHE_TILE_GRID_SIZE = (8, 8)
+NLM_H = 10
+NLM_TEMPLATE_WINDOW = 7
+NLM_SEARCH_WINDOW = 21
+
+# Límites de calibración (mm/px)
+# Rango amplio: 0.01-2.0 cubre imágenes clínicas (0.05-0.5) y redimensionadas/pequeñas (hasta 2.0)
+MIN_PIXEL_SIZE_MM = 0.01
+MAX_PIXEL_SIZE_MM = 2.0
+
+# Fallback scale factor when original image dimensions are invalid
+FALLBACK_SCALE = 1.0
+
+# Clinical thresholds
+SILLA_THRESHOLD_OPEN = 128  # Silla > 128 deg -> open angle tendency
+SILLA_THRESHOLD_CLOSED = 118  # Silla < 118 deg -> closed angle tendency
+
+# Directorio base de datos
+from pathlib import Path
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+CALIBRATION_CSV_PATH = DATA_DIR / "raw" / "Aariz" / "cephalogram_machine_mappings.csv"
+
 def get_sigma_heatmap():
     """Deriva sigma dinámicamente del tamaño de heatmap y SIGMA_RATIO."""
     return HEATMAP_SIZE_HW[1] * SIGMA_RATIO
-
-# Nombres de los 29 landmarks (estándar Aariz)
-LANDMARK_NAMES = [
-    'A', 'ANS', 'B', 'Me', 'N', 'Or', 'Pog',
-    'PNS', 'Pn', 'R', 'S', 'Ar', 'Co', 'Gn',
-    'Go', 'Po', 'LPM', 'LIT', 'LMT', 'UPM',
-    'UIA', 'UIT', 'UMT', 'LIA', 'Li', 'Ls',
-    "N'", "Pog'", 'Sn'
-]
 
 # Índices para puntos clave de análisis Steiner/Ricketts
 IDX_SELLA = 10      # S (Sella)

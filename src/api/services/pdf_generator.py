@@ -16,7 +16,8 @@ def generate_pdf(landmarks, steiner_results, image_path=None, watermark=False):
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, height - 50, "AI-Cefalo Cephalometric Report")
     c.setFont("Helvetica", 10)
-    c.drawString(50, height - 70, "Date: 2026-04-24")
+    import datetime
+    c.drawString(50, height - 70, f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}")
 
     # Watermark
     if watermark:
@@ -37,7 +38,7 @@ def generate_pdf(landmarks, steiner_results, image_path=None, watermark=False):
     c.setFont("Helvetica", 10)
     for angle_name, data in steiner_results.items():
         if isinstance(data, dict) and "value" in data:
-            text = f"{angle_name}: {data['value']}° - {data.get('color', 'N/A')}"
+            text = f"{angle_name}: {data['value']} - {data.get('color', 'N/A')}"
             c.drawString(70, y, text)
             y -= 20
 

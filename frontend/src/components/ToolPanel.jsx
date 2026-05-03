@@ -18,10 +18,15 @@ function ToolPanel({
   zoom, setZoom, onReset,
   activeFilters, setActiveFilters,
   labelFontSize, setLabelFontSize,
+  loading = false,
+  hiddenPoints = [],
+  setHiddenPoints,
+  confidences,
 }) {
+  const BASE_IMAGE_WIDTH = 1000;
   const [showLegend, setShowLegend] = useState(false)
 
-  const dynamicRadius = Math.max(4, Math.min(12, (imageWidth || 512) / 150))
+  const dynamicRadius = pointRadius ?? 4
 
   const handleRadiusChange = (delta) => {
     setPointRadius(prev => Math.max(2, Math.min(20, prev + delta)))
@@ -107,12 +112,12 @@ function ToolPanel({
             onClick={() => handleRadiusChange(-1)}
             className="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 font-bold"
           >-</button>
-          <span className="text-sm font-mono w-8 text-center">{pointRadius || dynamicRadius}</span>
+          <span className="text-sm font-mono w-12 text-center min-w-[3rem]">{(pointRadius ?? dynamicRadius).toFixed(1)}</span>
           <button
             onClick={() => handleRadiusChange(1)}
             className="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 font-bold"
           >+</button>
-          <span className="text-xs text-gray-500 ml-2">(Auto: {dynamicRadius})</span>
+          <span className="text-xs text-gray-500 ml-2">(Auto: 4)</span>
         </div>
       </div>
 
@@ -223,11 +228,31 @@ function ToolPanel({
           ].map(section => (
             <div key={section.title} className="mb-2">
               <p className="text-xs font-bold text-gray-700">{section.title}</p>
-              {section.items.map(l => (
-                <div key={l.id} className="text-xs text-gray-600 ml-2">
-                  [{l.id}]: {l.name}
-                </div>
-              ))}
+              {section.items.map(l => {
+                const isHidden = hiddenPoints.includes(l.id)
+                const conf = confidences?.[l.id]
+                const confPct = conf != null ? Math.round(conf * 100) : null
+                return (
+                  <div key={l.id} className="flex items-center text-xs text-gray-600 ml-2 py-0.5">
+                    <button
+                      onClick={() => isHidden
+                        ? setHiddenPoints(h => h.filter(x => x !== l.id))
+                        : setHiddenPoints(h => [...h, l.id])
+                      }
+                      className="mr-1.5 text-sm leading-none hover:scale-125 transition-transform"
+                      title={isHidden ? 'Mostrar punto' : 'Ocultar punto'}
+                    >
+                      {isHidden ? '👁‍🗨' : '👁'}
+                    </button>
+                    <span className="flex-1">[{l.id}]: {l.name}</span>
+                    {confPct != null && (
+                      <span className={`ml-1 px-1 rounded text-[10px] font-mono ${confPct >= 80 ? 'bg-green-100 text-green-700' : confPct >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                        {confPct}%
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           ))}
         </div>

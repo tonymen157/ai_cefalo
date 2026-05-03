@@ -89,7 +89,7 @@ Landmark coordinates MUST be scaled when transforming to original image space us
 
 **Backend:** Python 3.11, FastAPI + Uvicorn, ReportLab (PDF), Pillow, PostgreSQL + SQLAlchemy
 
-**Frontend:** React + Vite, Konva.js (canvas rendering), TailwindCSS
+**Frontend:** React + Vite, HTML5 Canvas (canvas rendering), TailwindCSS
 
 **Infrastructure:** Docker, Hugging Face Spaces (deployment), GitHub Actions (CI/CD)
 
@@ -191,7 +191,7 @@ docker run -p 7860:7860 aicefalo
 ## Frontend Key Components
 
 - **App.jsx** - Main app with step-based flow (Upload → Calibrate → Processing → Results → Download)
-- **LandmarkCanvas.jsx** - Konva.js canvas for displaying X-ray with detected landmarks
+- **LandmarkCanvas.jsx** - HTML5 canvas for displaying X-ray with detected landmarks
 - **ToolPanel.jsx** - Zoom, pan, landmark toggle controls
 - **SteinerTable.jsx** - Displays calculated orthodontic angles
 - **ResultsStep.jsx** - Shows detection results and PDF download

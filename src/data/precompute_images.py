@@ -23,7 +23,7 @@ import json
 
 from src.data.preprocessing import preprocess_xray
 from src.core.config import INPUT_SIZE_WH, INPUT_SIZE_HW, NUM_LANDMARKS
-from src.core.geometry import scale_landmarks
+from src.analysis.geometry_utils import scale_landmarks
 
 
 def preprocess_image(img_path_str):
@@ -69,11 +69,14 @@ def load_landmarks_raw(stem, senior_dir, junior_dir):
             return None
         with open(path, 'r') as f:
             data = json.load(f)
-        pts = np.zeros((NUM_LANDMARKS, 2), dtype=np.float32)
+        pts = np.full((NUM_LANDMARKS, 2), np.nan, dtype=np.float32)
         for i, lm in enumerate(data.get('landmarks', [])[:NUM_LANDMARKS]):
             val = lm.get('value', {})
-            pts[i, 0] = float(val.get('x', 0.0))
-            pts[i, 1] = float(val.get('y', 0.0))
+            x_val = val.get('x')
+            y_val = val.get('y')
+            if x_val is not None and y_val is not None:
+                pts[i, 0] = float(x_val)
+                pts[i, 1] = float(y_val)
         return pts
 
     senior = _parse(senior_dir / f"{stem}.json")
@@ -86,7 +89,7 @@ def load_landmarks_raw(stem, senior_dir, junior_dir):
     elif junior is not None:
         return junior
     else:
-        return np.zeros((NUM_LANDMARKS, 2), dtype=np.float32)
+        return np.full((NUM_LANDMARKS, 2), np.nan, dtype=np.float32)
 
 
 def process_split(dataset_path, split_name, output_dir):

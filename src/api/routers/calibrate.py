@@ -1,4 +1,5 @@
 import csv
+import math
 from uuid import uuid4
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -51,7 +52,7 @@ def calculate_manual_calibration(data: dict):
         if real_distance_mm <= 0:
             raise ValueError("Real distance must be positive")
 
-        pixel_distance = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+        pixel_distance = math.hypot(x2 - x1, y2 - y1)
         if pixel_distance == 0:
             raise ValueError("Points must be different")
 
@@ -83,7 +84,8 @@ CALIBRATION_TEMPLATES = {
 
 def _get_calibration_value(template_id: str) -> float:
     """Get known dimension for a calibration template."""
-    return CALIBRATION_TEMPLATES.get(template_id, 0.0)
+    val = CALIBRATION_TEMPLATES.get(template_id)
+    return float(val) if val is not None else None
 
 
 # === AUTO CALIBRATION USING CSV (RECOMMENDED) ===
@@ -92,16 +94,12 @@ def _get_calibration_value(template_id: str) -> float:
 
 def _get_pixel_size_from_csv(image_id: str) -> float:
     """Look up pixel_size from cephalogram_machine_mappings.csv.
-    Returns 0 if not found."""
-    # Usar path relativo desde el directorio del proyecto
-    dataset_base = Path(__file__).parent.parent.parent / "data" / "raw" / "Aariz"
-    csv_path = dataset_base / "cephalogram_machine_mappings.csv"
+    Uses SSOT path from config. Returns 0 if not found."""
+    from src.core.config import CALIBRATION_CSV_PATH
+    csv_path = CALIBRATION_CSV_PATH
 
-    # Alternativa: verificar path relativo
     if not csv_path.exists():
-        csv_path = Path("data/raw/Aariz/cephalogram_machine_mappings.csv").resolve()
-    if not csv_path.exists():
-        return 0.0
+        return None
     try:
         with open(csv_path, newline="") as f:
             reader = csv.DictReader(f)
@@ -115,10 +113,13 @@ def _get_pixel_size_from_csv(image_id: str) -> float:
                 else:
                     img_id = image_id
                 if row_id == img_id:
-                    return float(row.get("pixel_size", 0))
+                    val = row.get("pixel_size")
+                    if val is None or str(val).strip() == "":
+                        continue
+                    return float(val)
     except Exception:
         pass
-    return 0.0
+    return None
 
 
 @router.get("/auto")
@@ -132,7 +133,7 @@ def auto_calibration(image_id: str):
             detail="image_id parameter is required",
         )
     mm_per_pixel = _get_pixel_size_from_csv(image_id)
-    if mm_per_pixel <= 0:
+    if mm_per_pixel is None or mm_per_pixel <= 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No pixel_size found for image_id: {image_id}. Use /manual instead.",

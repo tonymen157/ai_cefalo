@@ -44,6 +44,7 @@ class CalibrationDetector:
     def validate_calibration(mm_per_pixel: float) -> bool:
         """
         Valida que el valor esté en rango clínico aceptable.
-        Rango: 0.05 - 0.15 mm/píxel (equipos cefalométricos estándar)
+        Rango: MIN_PIXEL_SIZE_MM - MAX_PIXEL_SIZE_MM desde config.
         """
-        return 0.05 <= mm_per_pixel <= 0.15
+        from src.core.config import MIN_PIXEL_SIZE_MM, MAX_PIXEL_SIZE_MM
+        return MIN_PIXEL_SIZE_MM <= mm_per_pixel <= MAX_PIXEL_SIZE_MM

@@ -5,7 +5,7 @@ function SteinerTable({ results, isPdfMode = false }) {
   const [activeCategory, setActiveCategory] = useState('todas');
 
   const getInterpretation = (val, item, results) => {
-    if (val == null || isNaN(val)) return { text: '-', color: 'text-gray-400' };
+    if (val == null || Number.isNaN(val)) return { text: '-', color: 'text-gray-400' };
 
     // Prioridad: usar interpretacion del backend si existe (ej: Silla_interp, Cuerpo_Mandibular_interp)
     const interpKey = item.id + '_interp';
@@ -132,7 +132,7 @@ function SteinerTable({ results, isPdfMode = false }) {
                       <td className="text-left px-2 py-4 font-medium text-gray-800">{item.id}</td>
                       <td className="text-center px-2 py-4 text-gray-500">{item.normal}{item.unit} (±{item.sd})</td>
                       <td className="text-center px-2 py-4 font-bold text-gray-900">
-                        {patientVal !== null && !isNaN(patientVal) ? `${patientVal.toFixed(2)}${item.unit}` : '-'}
+                        {patientVal !== null && !Number.isNaN(patientVal) ? `${patientVal.toFixed(2)}${item.unit}` : '-'}
                       </td>
                       <td className={`text-center px-2 py-4 text-xs font-semibold ${status.color} whitespace-normal`}>
                         <span className="px-2 py-1 rounded-full">{status.text}</span>

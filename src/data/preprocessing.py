@@ -57,23 +57,29 @@ def preprocess_xray(img: np.ndarray, target_size=None, config=None):
     if img.ndim == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Parámetros por defecto si no se pasa config
-    clip_limit = 2.0
-    tile_grid_size = (8, 8)
-    nlm_h = 10
-    nlm_template_window = 7
-    nlm_search_window = 21
+    # Parámetros desde config (evita magic numbers)
+    from src.core.config import (
+        CLAHE_CLIP_LIMIT, CLAHE_TILE_GRID_SIZE,
+        NLM_H, NLM_TEMPLATE_WINDOW, NLM_SEARCH_WINDOW
+    )
+
+    clip_limit = CLAHE_CLIP_LIMIT
+    tile_grid_size = CLAHE_TILE_GRID_SIZE
+    nlm_h = NLM_H
+    nlm_template_window = NLM_TEMPLATE_WINDOW
+    nlm_search_window = NLM_SEARCH_WINDOW
 
     if config is not None:
         pcfg = config.get('preprocessing', {})
         clahe_cfg = pcfg.get('clahe', {})
-        clip_limit = clahe_cfg.get('clip_limit', 2.0)
-        tile_grid_size = tuple(clahe_cfg.get('tile_grid_size', [8, 8]))
-        nlm_h = pcfg.get('nlm_h', 10)
-        nlm_template_window = pcfg.get('nlm_template_window', 7)
-        nlm_search_window = pcfg.get('nlm_search_window', 21)
+        clip_limit = clahe_cfg.get('clip_limit', CLAHE_CLIP_LIMIT)
+        tile_grid_size = tuple(clahe_cfg.get('tile_grid_size', list(CLAHE_TILE_GRID_SIZE)))
+        nlm_h = pcfg.get('nlm_h', NLM_H)
+        nlm_template_window = pcfg.get('nlm_template_window', NLM_TEMPLATE_WINDOW)
+        nlm_search_window = pcfg.get('nlm_search_window', NLM_SEARCH_WINDOW)
 
-    # CLAHE
+    # 2. CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    # clipLimit desde config.py (2.0 según CLAUDE.md, no 4.0)
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
     img = clahe.apply(img)
 
@@ -95,6 +101,8 @@ def preprocess_xray(img: np.ndarray, target_size=None, config=None):
     else:
         target_w, target_h = target_size
 
+    if w <= 0 or h <= 0:
+        return np.zeros((target_h, target_w), dtype=np.float32), 1.0, 0, 0
     scale = min(target_w / w, target_h / h)
     new_w = int(w * scale)
     new_h = int(h * scale)
