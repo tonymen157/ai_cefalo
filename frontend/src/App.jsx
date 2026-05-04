@@ -27,9 +27,9 @@ function RequireData({ children }) {
       return
     }
 
-    // Paso 3 (process): requiere job_id
-    if (location.pathname === '/process' && !jobId) {
-      console.warn('No hay job_id. Redirigiendo a upload...')
+    // Paso 3 (process): requiere image_id (el job_id se crea al iniciar procesamiento)
+    if (location.pathname === '/process' && !imageId) {
+      console.warn('No hay image_id. Redirigiendo a upload...')
       navigate('/upload', { replace: true })
       return
     }
