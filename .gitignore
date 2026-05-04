@@ -52,4 +52,4 @@ private_archive/
 
 # Temp files
 *.txt
-frontend/.env
+# frontend/.env # Comentado: ahora se sube para Vercel
