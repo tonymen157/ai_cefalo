@@ -3,6 +3,7 @@ sys.path.insert(0, '.')
 
 import torch
 import numpy as np
+import math
 from pathlib import Path
 import cv2
 
@@ -54,6 +55,29 @@ def preprocess_image(img: np.ndarray):
     return tensor, scale, x_offset, y_offset
 
 
+def _affine_transform(tensor, theta_deg=0.0, scale_factor=1.0):
+    """Apply affine transformation (rotation + scale) via grid_sample.
+
+    Args:
+        tensor: (N, C, H, W)
+        theta_deg: rotation angle in degrees (positive = counter-clockwise)
+        scale_factor: scale factor (>1 = zoom in, <1 = zoom out)
+    Returns:
+        transformed tensor
+    """
+    theta = theta_deg * math.pi / 180.0
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
+
+    # Build 2x3 affine matrix: [cos, -sin, 0; sin, cos, 0] * scale
+    affine = torch.tensor([
+        [cos_t * scale_factor, -sin_t * scale_factor, 0.0],
+        [sin_t * scale_factor,  cos_t * scale_factor, 0.0],
+    ], device=_device).unsqueeze(0)
+
+    grid = torch.nn.functional.affine_grid(affine, tensor.shape, align_corners=False)
+    return torch.nn.functional.grid_sample(tensor, grid, align_corners=False)
+
+
 def detect_landmarks(image: np.ndarray, orig_w: int = None, orig_h: int = None):
     """Run inference and return 29 landmarks and confidences.
 
@@ -78,45 +102,56 @@ def detect_landmarks(image: np.ndarray, orig_w: int = None, orig_h: int = None):
     tensor, scale, x_offset, y_offset = preprocess_image(image)
     tensor = tensor.to(_device)
 
-    # INFERENCIA CON TTA (Solo Iluminación - Rollback V46.0)
+    # INFERENCIA CON TTA ESPACIAL (Iluminación + Rotación ±3° + Escala 1.05x)
     with torch.no_grad():
-        # Crear variantes de iluminación (Clamp para no salir del rango normalizado)
-        tensor_normal = tensor
-        tensor_bright = torch.clamp(tensor * 1.2, max=tensor.max().item())
-        tensor_dark = tensor * 0.8
+        # --- PASS 1: Normal ---
+        hm_normal = model(tensor)
 
-        # Pasar las 3 variantes por el modelo
-        hm_normal = model(tensor_normal)
-        hm_bright = model(tensor_bright)
-        hm_dark = model(tensor_dark)
+        # --- PASS 2: Rotación +3° (contra-reloj) ---
+        tensor_rot_p = _affine_transform(tensor, theta_deg=3.0, scale_factor=1.0)
+        hm_rot_p = model(tensor_rot_p)
+        # Inversa: rotar heatmap -3° para realinear
+        hm_rot_p_inv = _affine_transform(hm_rot_p, theta_deg=-3.0, scale_factor=1.0)
 
-        # Promediar los heatmaps
-        heatmaps = 0.5 * hm_normal + 0.25 * hm_bright + 0.25 * hm_dark
+        # --- PASS 3: Rotación -3° (reloj) ---
+        tensor_rot_n = _affine_transform(tensor, theta_deg=-3.0, scale_factor=1.0)
+        hm_rot_n = model(tensor_rot_n)
+        # Inversa: rotar heatmap +3° para realinear
+        hm_rot_n_inv = _affine_transform(hm_rot_n, theta_deg=3.0, scale_factor=1.0)
 
-        # --- MEJORA V50.0: SUAVIZADO GAUSSIANO ---
-        # Aplicamos un desenfoque leve para eliminar picos de ruido falsos
-        # Sigma dinámico desde config (se ajusta a cualquier tamaño de heatmap)
+        # --- PASS 4: Escala 1.05x (zoom leve) ---
+        tensor_scaled = _affine_transform(tensor, theta_deg=0.0, scale_factor=1.05)
+        hm_scaled = model(tensor_scaled)
+        # Inversa: escalar heatmap de vuelta por 1/1.05
+        hm_scaled_inv = _affine_transform(hm_scaled, theta_deg=0.0, scale_factor=1.0/1.05)
+
+        # Promediar: 50% normal, 16.67% cada variante espacial
+        heatmaps = (0.5 * hm_normal +
+                     0.1667 * hm_rot_p_inv +
+                     0.1667 * hm_rot_n_inv +
+                     0.1667 * hm_scaled_inv)
+
+        # --- EXTRACCIÓN DE CONFIDENCE ANTES DEL SUAVIZADO ---
+        # Esto preserva el valor de pico real del modelo sin reducción artificial
+        confidences = heatmaps.view(1, 29, -1).max(dim=-1)[0].cpu().numpy()[0]  # (29,)
+
+        # --- SUAVIZADO GAUSSIANO (DESPUÉS del promedio y extracción) ---
         from src.core.config import get_sigma_heatmap
         kernel_size = 3
         sigma = get_sigma_heatmap()
 
-        # Crear kernel gaussiano 2D
         x = torch.arange(kernel_size).to(_device) - (kernel_size - 1) / 2
         g = torch.exp(-x.pow(2) / (2 * sigma**2))
         g = g / g.sum()
         kernel = g.view(1, 1, -1, 1) * g.view(1, 1, 1, -1)
-        kernel = kernel.repeat(29, 1, 1, 1)  # Repetir para los 29 canales (landmarks)
+        kernel = kernel.repeat(29, 1, 1, 1)
 
-        # Aplicar convolución para suavizar cada canal de heatmap individualmente
         heatmaps = torch.nn.functional.pad(heatmaps, (1, 1, 1, 1), mode='replicate')
         heatmaps = torch.nn.functional.conv2d(heatmaps, kernel, groups=29)
-        # ------------------------------------------
+        # ---------------------------------------------------------------
 
-        # Decodificación: soft-argmax con ventana 3x3
+        # Decodificación: soft-argmax con refinamiento sub-píxel parabólico
         landmarks_norm = model.decode_heatmaps(heatmaps)  # (1, 29, 2) en [0, 1]
-
-        # EXTRACCIÓN DE CONFIDENCE
-        confidences = heatmaps.view(1, 29, -1).max(dim=-1)[0].cpu().numpy()[0]  # (29,)
 
     # decode_heatmaps returns coords in [0,1] relative to heatmap (128x128)
     landmarks_1 = landmarks_norm.cpu().numpy()[0]  # (29, 2) in [0,1]

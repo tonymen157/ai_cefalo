@@ -44,8 +44,29 @@ export function useApi() {
     console.log('[useApi] BASE:', api.defaults.baseURL)
     console.log('[useApi] ENDPOINT:', url)
     console.log('[useApi] FULL URL:', api.defaults.baseURL + url)
-    const response = await api.post(url, data)
-    return response.data
+    console.log('[useApi] Data type:', data instanceof FormData ? 'FormData' : typeof data)
+    if (data instanceof FormData) {
+      for (let pair of data.entries()) {
+        console.log('[useApi] FormData:', pair[0], pair[1] instanceof File ? `File: ${pair[1].name} (${pair[1].size} bytes)` : pair[1])
+      }
+    }
+    try {
+      const response = await api.post(url, data)
+      return response.data
+    } catch (err) {
+      console.error('[useApi] FULL ERROR:', {
+        message: err.message,
+        code: err.code,
+        response: err.response ? {
+          status: err.response.status,
+          statusText: err.response.statusText,
+          data: err.response.data,
+          headers: err.response.headers
+        } : null,
+        request: err.request ? 'Request was made but no response' : null
+      })
+      throw err
+    }
   }
 
   const get = async (url) => {

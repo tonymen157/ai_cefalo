@@ -43,10 +43,12 @@ def cleanup_old_uploads():
 
 @router.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
+    print(f"[DEBUG-upload] Received file: filename={file.filename}, content_type={file.content_type}, size={file.size}")
     # Limpiar archivos antiguos antes de procesar nueva subida
     cleanup_old_uploads()
 
     if file.content_type not in ("image/jpeg", "image/png", "image/jpg"):
+        print(f"[DEBUG-upload] Rejected file: invalid content_type={file.content_type}")
         raise HTTPException(status_code=400, detail="Only JPG/PNG images are allowed")
 
     # Validar tamaño del archivo antes de leerlo completo en memoria

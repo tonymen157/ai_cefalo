@@ -328,7 +328,7 @@ class CephalometricAnalysis:
             except (ValueError, TypeError):
                 return None
 
-        result = {
+        return {
             "SNA": safe_round(sna),
             "SNB": safe_round(snb),
             "ANB": safe_round(anb),
@@ -349,9 +349,7 @@ class CephalometricAnalysis:
             "Interincisal": safe_round(dental["Interincisal"]),
             "1Sup_APg": safe_round(dental["1Sup_APg"]),
             "1Inf_APg": safe_round(dental["1Inf_APg"]),
-            # Campo de diagnóstico coherente
             "clase_esqueletal": clase,
             "Silla_interp": jarabak_interp.get("Silla_clase"),
             "Cuerpo_Mandibular_interp": jarabak_interp.get("Cuerpo_Mandibular_clase")
         }
-        return result

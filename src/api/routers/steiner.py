@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -16,27 +16,11 @@ class SteinerRequest(BaseModel):
     image_id: Optional[str] = None
 
 
-class SteinerResponse(BaseModel):
-    SNA: Optional[float] = None
-    SNB: Optional[float] = None
-    ANB: Optional[float] = None
-    WITS: Optional[float] = None
-    Ls_E: Optional[float] = None
-    Li_E: Optional[float] = None
-    clase_esqueletal: Optional[str] = None
-    success: bool = True
-
-
 @router.post("/steiner-analysis")
 async def steiner_analysis(request: SteinerRequest):
     """
-    Perform Steiner cephalometric analysis.
-
-    Args:
-        request: SteinerRequest with landmarks and optional pixel_size_mm
-
-    Returns:
-        SteinerResponse with calculated angles
+    Perform cephalometric analysis (Steiner, Ricketts, Jarabak, Dental).
+    Returns all calculated measurements as a flat dictionary.
     """
     try:
         import numpy as np
@@ -57,17 +41,8 @@ async def steiner_analysis(request: SteinerRequest):
         )
 
         result = analysis.reporte_json()
-
-        return SteinerResponse(
-            SNA=result.get("SNA"),
-            SNB=result.get("SNB"),
-            ANB=result.get("ANB"),
-            WITS=result.get("WITS"),
-            Ls_E=result.get("Ls_E"),
-            Li_E=result.get("Li_E"),
-            clase_esqueletal=result.get("clase_esqueletal"),
-            success=True
-        )
+        result["success"] = True
+        return result
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Steiner analysis failed: {str(e)}")

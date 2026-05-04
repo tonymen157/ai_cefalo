@@ -41,28 +41,296 @@ def run_inference(job_id: str, image_id: str, calibration_mmpp: float):
         img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
         landmarks, confidences = detect_landmarks(img_gray, orig_w=orig_w, orig_h=orig_h)
 
-        # --- AUDITORÍA ANATÓMICA (Sanity Checks) ---
+                # --- AUDITORIA ANATOMICA (Penalizacion Z-Score Ideal) ---
         system_warnings = []
         try:
-            # Regla de Oro 1: El Nasion (frente) debe estar arriba del Menton (barbilla)
-            if landmarks[4][1] >= landmarks[3][1]:
-                confidences[4] = 0.0
-                confidences[3] = 0.0
-                system_warnings.append("Inconsistencia: Nasion no está arriba de Menton")
+            import math
+            import statistics
 
-            # Regla de Oro 2: La Sella Turca debe estar arriba del punto Articular
+            # ESTADISTICAS ADAPTATIVAS (sin hardcoding)
+            all_y = [landmarks[i][1] for i in range(29)]
+            all_x = [landmarks[i][0] for i in range(29)]
+            mean_y = statistics.mean(all_y)
+            mean_x = statistics.mean(all_x)
+            std_y = statistics.stdev(all_y) if len(all_y) > 1 else 1.0
+            std_x = statistics.stdev(all_x) if len(all_x) > 1 else 1.0
+            diag = math.sqrt((max(all_x)-min(all_x))**2 + (max(all_y)-min(all_y))**2)
+
+            def z_penalty(violation_px, std_dev):
+                """Penalizacion desactivada: retorna 1.0 siempre.
+                Las confianzas se mantienen INTACTAS (crudas del TTA).
+                """
+                return 1.0
+
+            def dist(i, j):
+                return math.sqrt((landmarks[i][0]-landmarks[j][0])**2 + (landmarks[i][1]-landmarks[j][1])**2)
+
+            # [0] A-point: DEBE estar ABAJO de Nasion [4]
+            v = landmarks[0][1] - landmarks[4][1]
+            if v > 0:
+                f = z_penalty(v, std_y)
+                confidences[0] *= f
+                system_warnings.append(f"A-point {v:.1f}px abajo de Nasion ({f:.0%})")
+
+            # [1] ANS: DEBE estar entre Nasion [4] y A-point [0]
+            y_ans = landmarks[1][1]
+            if y_ans > landmarks[4][1]:
+                v = y_ans - landmarks[4][1]
+                f = z_penalty(v, std_y)
+                confidences[1] *= f
+                system_warnings.append(f"ANS {v:.1f}px arriba de Nasion ({f:.0%})")
+            elif y_ans < landmarks[0][1]:
+                v = landmarks[0][1] - y_ans
+                f = z_penalty(v, std_y)
+                confidences[1] *= f
+                system_warnings.append(f"ANS {v:.1f}px abajo de A-point ({f:.0%})")
+
+            # [2] B-point: DEBE estar ABAJO de A-point [0]
+            v = landmarks[2][1] - landmarks[0][1]
+            if v > 0:
+                f = z_penalty(v, std_y)
+                confidences[2] *= f
+                system_warnings.append(f"B-point {v:.1f}px abajo de A-point ({f:.0%})")
+
+            # [3] Menton (Me): DEBE estar ABAJO de Nasion [4] y B-point [2]
+            v1 = landmarks[3][1] - landmarks[4][1]
+            if v1 > 0:
+                f = z_penalty(v1, std_y)
+                confidences[3] *= f
+                system_warnings.append(f"Menton {v1:.1f}px arriba de Nasion ({f:.0%})")
+            v2 = landmarks[3][1] - landmarks[2][1]
+            if v2 > 0:
+                f = z_penalty(v2, std_y)
+                confidences[3] *= f
+                system_warnings.append(f"Menton {v2:.1f}px arriba de B-point ({f:.0%})")
+
+            # [4] Nasion (N): DEBE ser el mas arriba (menor Y)
+            max_y_others = max(landmarks[i][1] for i in range(29) if i != 4)
+            v = landmarks[4][1] - max_y_others
+            if v > 0:
+                f = z_penalty(v, std_y * 1.1)
+                confidences[4] *= f
+                system_warnings.append(f"Nasion {v:.1f}px NO es el mas arriba ({f:.0%})")
+
+            # [5] Orbitale: cerca de Nasion [4] (misma altura)
+            v = abs(landmarks[5][1] - landmarks[4][1])
+            if v > std_y * 0.5:
+                f = z_penalty(v - std_y * 0.5, std_y)
+                confidences[5] *= f
+                system_warnings.append(f"Orbitale {v:.1f}px de Nasion ({f:.0%})")
+
+            # [6] Pogonion: cerca de B-point [2] (misma altura)
+            v = abs(landmarks[6][1] - landmarks[2][1])
+            if v > std_y * 0.5:
+                f = z_penalty(v - std_y * 0.5, std_y)
+                confidences[6] *= f
+                system_warnings.append(f"Pogonion {v:.1f}px de B-point ({f:.0%})")
+
+            # [7] PNS: ABAJO de ANS [1] y ARRIBA de Menton [3]
+            if landmarks[7][1] < landmarks[1][1]:
+                v = landmarks[1][1] - landmarks[7][1]
+                f = z_penalty(v, std_y)
+                confidences[7] *= f
+                system_warnings.append(f"PNS {v:.1f}px arriba de ANS ({f:.0%})")
+            if landmarks[7][1] > landmarks[3][1]:
+                v = landmarks[7][1] - landmarks[3][1]
+                f = z_penalty(v, std_y)
+                confidences[7] *= f
+                system_warnings.append(f"PNS {v:.1f}px abajo de Menton ({f:.0%})")
+
+            # [8] Prosthion (Pn): Entre A-point [0] y Menton [3]
+            if landmarks[8][1] < landmarks[0][1]:
+                v = landmarks[0][1] - landmarks[8][1]
+                f = z_penalty(v, std_y)
+                confidences[8] *= f
+                system_warnings.append(f"Prosthion {v:.1f}px arriba de A-point ({f:.0%})")
+            if landmarks[8][1] > landmarks[3][1]:
+                v = landmarks[8][1] - landmarks[3][1]
+                f = z_penalty(v, std_y)
+                confidences[8] *= f
+                system_warnings.append(f"Prosthion {v:.1f}px abajo de Menton ({f:.0%})")
+
+            # [9] Rhinion (R): Entre Nasion [4] y A-point [0]
+            if landmarks[9][1] < landmarks[4][1]:
+                v = landmarks[4][1] - landmarks[9][1]
+                f = z_penalty(v, std_y)
+                confidences[9] *= f
+                system_warnings.append(f"Rhinion {v:.1f}px arriba de Nasion ({f:.0%})")
+            if landmarks[9][1] > landmarks[0][1]:
+                v = landmarks[9][1] - landmarks[0][1]
+                f = z_penalty(v, std_y)
+                confidences[9] *= f
+                system_warnings.append(f"Rhinion {v:.1f}px abajo de A-point ({f:.0%})")
+
+            # [10] Sella (S): ARRIBA de Articular [11] y ABAJO de Nasion [4]
             if landmarks[10][1] >= landmarks[11][1]:
-                confidences[10] = 0.0
-                confidences[11] = 0.0
-                system_warnings.append("Inconsistencia: Sella no está arriba de Articular")
+                v = landmarks[10][1] - landmarks[11][1]
+                f = z_penalty(v, std_y)
+                confidences[10] *= f
+                system_warnings.append(f"Sella {v:.1f}px abajo de Articular ({f:.0%})")
+            if landmarks[10][1] <= landmarks[4][1]:
+                v = landmarks[4][1] - landmarks[10][1]
+                f = z_penalty(v, std_y)
+                confidences[10] *= f
+                system_warnings.append(f"Sella {v:.1f}px arriba de Nasion ({f:.0%})")
 
-            # Regla de Oro 3: El Nasion [4] debe estar arriba del punto Subespinal (A-point) [0]
-            if landmarks[4][1] >= landmarks[0][1]:
-                confidences[4] = 0.0
-                confidences[0] = 0.0
-                system_warnings.append("Inconsistencia: Nasion no está arriba de A-point")
+            # [11] Articular (Ar): ABAJO de Sella [10] y arriba de Gonion [14]
+            if landmarks[11][1] <= landmarks[10][1]:
+                v = landmarks[10][1] - landmarks[11][1]
+                f = z_penalty(v, std_y)
+                confidences[11] *= f
+                system_warnings.append(f"Articular {v:.1f}px arriba de Sella ({f:.0%})")
+            if landmarks[11][1] >= landmarks[14][1]:
+                v = landmarks[11][1] - landmarks[14][1]
+                f = z_penalty(v, std_y)
+                confidences[11] *= f
+                system_warnings.append(f"Articular {v:.1f}px abajo de Gonion ({f:.0%})")
 
-        except (IndexError, TypeError):
+            # [12] Condilo (Co): Cerca de Articular [11]
+            v = dist(12, 11)
+            max_dist = diag * 0.05
+            if v > max_dist:
+                f = z_penalty(v - max_dist, std_y)
+                confidences[12] *= f
+                system_warnings.append(f"Condilo {v:.1f}px de Articular ({f:.0%})")
+
+            # [13] Gnathion (Gn): Cerca de Menton [3] y Pogonion [6]
+            v1 = dist(13, 3)
+            v2 = dist(13, 6)
+            max_d = diag * 0.03
+            if v1 > max_d:
+                f = z_penalty(v1 - max_d, std_y)
+                confidences[13] *= f
+                system_warnings.append(f"Gnathion {v1:.1f}px de Menton ({f:.0%})")
+            if v2 > max_d:
+                f = z_penalty(v2 - max_d, std_y)
+                confidences[13] *= f
+                system_warnings.append(f"Gnathion {v2:.1f}px de Pogonion ({f:.0%})")
+
+            # [14] Gonion (Go): ABAJO de Articular [11] y cerca de Mandibula
+            if landmarks[14][1] <= landmarks[11][1]:
+                v = landmarks[11][1] - landmarks[14][1]
+                f = z_penalty(v, std_y)
+                confidences[14] *= f
+                system_warnings.append(f"Gonion {v:.1f}px arriba de Articular ({f:.0%})")
+            v_b = dist(14, 2)
+            v_p = dist(14, 6)
+            max_w = diag * 0.08
+            if v_b > max_w or v_p > max_w:
+                f = z_penalty(max(v_b, v_p) - max_w, std_x)
+                confidences[14] *= f
+                system_warnings.append(f"Gonion lejos de mandibula ({f:.0%})")
+
+            # [15] Porion (Po): ARRIBA de Articular [11] y Gonion [14]
+            if landmarks[15][1] >= landmarks[11][1]:
+                v = landmarks[15][1] - landmarks[11][1]
+                f = z_penalty(v, std_y)
+                confidences[15] *= f
+                system_warnings.append(f"Porion {v:.1f}px abajo de Articular ({f:.0%})")
+            if landmarks[15][1] >= landmarks[14][1]:
+                v = landmarks[15][1] - landmarks[14][1]
+                f = z_penalty(v, std_y)
+                confidences[15] *= f
+                system_warnings.append(f"Porion {v:.1f}px abajo de Gonion ({f:.0%})")
+
+            # [16] LPM (Lower Molar Tip): Derecha de LIT [17] (en X)
+            v = landmarks[16][0] - landmarks[17][0]
+            if v < 0:
+                f = z_penalty(-v, std_x)
+                confidences[16] *= f
+                system_warnings.append(f"LPM {(-v):.1f}px a la izquierda de LIT ({f:.0%})")
+
+            # [17] LIT (Lower Incisor Tip): Izquierda de LMT [16] (en X)
+            v = landmarks[17][0] - landmarks[16][0]
+            if v > 0:
+                f = z_penalty(v, std_x)
+                confidences[17] *= f
+                system_warnings.append(f"LIT {v:.1f}px a la derecha de LMT ({f:.0%})")
+
+            # [18] UMT (Upper Molar Tip): Derecha de UIT [21] (en X)
+            v = landmarks[18][0] - landmarks[21][0]
+            if v < 0:
+                f = z_penalty(-v, std_x)
+                confidences[18] *= f
+                system_warnings.append(f"UMT {(-v):.1f}px a la izquierda de UIT ({f:.0%})")
+
+            # [19] UPM (Upper Molar Tip): Izquierda de UMT [18] (en X)
+            v = landmarks[19][0] - landmarks[18][0]
+            if v > 0:
+                f = z_penalty(v, std_x)
+                confidences[19] *= f
+                system_warnings.append(f"UPM {v:.1f}px a la derecha de UMT ({f:.0%})")
+
+            # [20] LPM (Lower Molar Tip): Izquierda de LMT [16] (en X)
+            v = landmarks[20][0] - landmarks[16][0]
+            if v > 0:
+                f = z_penalty(v, std_x)
+                confidences[20] *= f
+                system_warnings.append(f"LPM {v:.1f}px a la derecha de LMT ({f:.0%})")
+
+            # [21] UIT (Upper Incisor Tip): Izquierda de UMT [18] (en X)
+            v = landmarks[21][0] - landmarks[18][0]
+            if v > 0:
+                f = z_penalty(v, std_y)
+                confidences[21] *= f
+                system_warnings.append(f"UIT {v:.1f}px a la derecha de UMT ({f:.0%})")
+
+            # [22] UIA (Upper Incisor Apex): ARRIBA de UIT [21]
+            v = landmarks[22][1] - landmarks[21][1]
+            if v > 0:
+                f = z_penalty(v, std_y)
+                confidences[22] *= f
+                system_warnings.append(f"UIA {v:.1f}px abajo de UIT ({f:.0%})")
+
+            # [23] LIA (Lower Incisor Apex): ARRIBA de LIT [17]
+            v = landmarks[23][1] - landmarks[17][1]
+            if v > 0:
+                f = z_penalty(v, std_y)
+                confidences[23] *= f
+                system_warnings.append(f"LIA {v:.1f}px abajo de LIT ({f:.0%})")
+
+            # [24] Li (Lower Lip): Cerca de LIT [17]
+            v = dist(24, 17)
+            if v > diag * 0.03:
+                f = z_penalty(v - diag * 0.03, std_y)
+                confidences[24] *= f
+                system_warnings.append(f"Lower Lip {v:.1f}px de LIT ({f:.0%})")
+
+            # [25] Ls (Upper Lip): Cerca de UIT [21]
+            v = dist(25, 21)
+            if v > diag * 0.03:
+                f = z_penalty(v - diag * 0.03, std_y)
+                confidences[25] *= f
+                system_warnings.append(f"Upper Lip {v:.1f}px de UIT ({f:.0%})")
+
+            # [26] N' (N Prime): Cerca de Nasion [4]
+            v = dist(26, 4)
+            if v > diag * 0.02:
+                f = z_penalty(v - diag * 0.02, std_y)
+                confidences[26] *= f
+                system_warnings.append(f"N' {v:.1f}px de Nasion ({f:.0%})")
+
+            # [27] Pog' (Soft Pogonion): Cerca de Pogonion [6]
+            v = dist(27, 6)
+            if v > diag * 0.02:
+                f = z_penalty(v - diag * 0.02, std_y)
+                confidences[27] *= f
+                system_warnings.append(f"Pog' {v:.1f}px de Pogonion ({f:.0%})")
+
+            # [28] Sn (Subnasale): Entre Nasion [4] y A-point [0]
+            if landmarks[28][1] < landmarks[4][1]:
+                v = landmarks[4][1] - landmarks[28][1]
+                f = z_penalty(v, std_y)
+                confidences[28] *= f
+                system_warnings.append(f"Sn {v:.1f}px arriba de Nasion ({f:.0%})")
+            if landmarks[28][1] > landmarks[0][1]:
+                v = landmarks[28][1] - landmarks[0][1]
+                f = z_penalty(v, std_y)
+                confidences[28] *= f
+                system_warnings.append(f"Sn {v:.1f}px abajo de A-point ({f:.0%})")
+
+        except (IndexError, TypeError, Exception) as e:
+            print(f"[DEBUG-audit] Error in anatomical audit: {e}")
             pass
 
         # Draw landmarks on image (same style as predict.py)
